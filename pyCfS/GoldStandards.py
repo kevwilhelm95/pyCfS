@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn2
 from PIL import Image
-#from venn import venn
+from venn import venn
 from scipy.stats import norm, hypergeom, fisher_exact
 import networkx as nx
 from Bio import Entrez
@@ -1755,6 +1755,8 @@ def pubmed_comentions(query:list, keyword: str, field:str = 'all', email:str = '
             # save results in dicts for output
             enrich_results[(min_thresh, max_thresh)] = (observation, z_score)
             enrich_images[(min_thresh, max_thresh)] = image
+    else:
+        enrich_results, enrich_images = {}, {}
 
     if savepath:
         query_comention_df.to_csv(savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
