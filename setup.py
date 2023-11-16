@@ -1,4 +1,6 @@
-# Show name, version, platform-dependencies, and more info
+"""
+Setup script for pyCfS, a package for gene list validation experiments
+"""
 import setuptools
 
 VERSION = '0.0.1'
@@ -21,5 +23,5 @@ setuptools.setup(
         'Programming Language :: Python :: 3.8'
     ],
     include_package_data = True,
-    package_data = {'':['data/*.feather', 'data/*.txt']}
+    package_data = {'':['data/*.feather', 'data/*.txt', 'data/*.gmt', 'data/*.csv']}
 )

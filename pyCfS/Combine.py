@@ -1461,7 +1461,7 @@ def _p_multiply(df: pd.DataFrame) -> pd.DataFrame:
     df['p.multiply'] = sub_df.prod(axis=1)
     return df
 
-def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, savepath:Any = False) -> pd.DataFrame:
+def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
     """
     Combines statistical data from multiple DataFrames using various statistical methods.
 
@@ -1484,6 +1484,8 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
         The fifth DataFrame to be included in the statistical combination (default is False).
     df_6 : Any, optional
         The sixth DataFrame to be included in the statistical combination (default is False).
+    list_names : Any, optional
+        The names of the DataFrames to be included in the statistical combination (default is False).
     savepath : Any, optional
         If provided, the path where the resulting DataFrame will be saved as a CSV file (default is False).
 
@@ -1502,7 +1504,14 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     --------
     >>> df_combined = statistical_combination(df_1, df_2, df_3=df_3, savepath="path/to/save/")
     """
-    df_dict = {1:df_1, 2:df_2, 3:df_3, 4:df_4, 5:df_5, 6:df_6}
+    # Prepare input
+    df_dict = {}
+    df_list = [x for x in [df_1, df_2, df_3, df_4, df_5, df_6] if x is not False]
+    if list_names:
+        for j in range(len(list_names)):
+            df_dict[list_names[j]] = df_list[j]
+    else:
+        df_dict = {1:df_1, 2:df_2, 3:df_3, 4:df_4, 5:df_5, 6:df_6}
     clean_df = _merge_p_inputs(df_dict)
     # Calculate CCT, minP
     df = _cauchy_combination_test(clean_df)
@@ -1517,3 +1526,4 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
 
     return df
 #endregion
+
