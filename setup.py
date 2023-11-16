@@ -1,3 +1,4 @@
+# Show name, version, platform-dependencies, and more info
 import setuptools
 
 VERSION = '0.0.1'
@@ -11,10 +12,8 @@ setuptools.setup(
     description = "Gene list validation experiments",
     long_description = open('DESCRIPTION.rst').read(),
     packages = setuptools.find_packages(),
-    install_requires = ['io', 'requests', 'time', 'multiprocessing', 'typing',
-        'collections', 'urllib', 'http', 'pandas', 'numpy', 'matplotlib', 'matplotlib_venn', 'PIL',
-         'venn', 'scipy', 'networkx', 'Bio', 'concurrent', 'itertools', 'upsetplot', 'ast',
-         'markov_clustering', 'statsmodels'
+    install_requires = ['requests', 'pandas', 'numpy', 'matplotlib', 'matplotlib_venn', 'Pillow',
+         'venn', 'scipy', 'networkx', 'biopython', 'upsetplot', 'markov_clustering', 'statsmodels'
     ],
     classifiers = [
         'Programming Language :: Python',
