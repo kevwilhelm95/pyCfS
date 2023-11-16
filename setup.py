@@ -13,7 +13,7 @@ setuptools.setup(
     long_description = open('DESCRIPTION.rst').read(),
     packages = setuptools.find_packages(),
     install_requires = ['requests', 'pandas', 'numpy', 'matplotlib', 'matplotlib_venn', 'Pillow',
-         'venn', 'scipy', 'networkx', 'biopython', 'upsetplot', 'markov_clustering', 'statsmodels'
+         'venn', 'scipy', 'networkx', 'biopython', 'upsetplot', 'markov_clustering', 'statsmodels', 'pyarrow'
     ],
     classifiers = [
         'Programming Language :: Python',
