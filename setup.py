@@ -3,7 +3,7 @@ import setuptools
 VERSION = '0.0.1'
 
 setuptools.setup(
-    name = 'pyCFS',
+    name = 'pyCfS',
     version = VERSION,
     url = "",
     author = "Kevin Wilhelm, Jenn Asmussen, Andrew Bigler",
