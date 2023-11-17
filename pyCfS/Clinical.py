@@ -427,11 +427,11 @@ def _process_df(df:pd.DataFrame, q_cut:float) -> pd.DataFrame:
     Process a pandas DataFrame by transforming the fdr column to -log10(FDR), counting how many phenotypes are significant,
     counting how many phenotypes are in a higher class, sorting the values by number of significant phenotypes, the total number
     of phenotypes, and the name (to induce randomness in upper-level).
-    
+
     Args:
     - df: pandas DataFrame
     - q_cut: float
-    
+
     Returns:
     - pandas DataFrame
     """
