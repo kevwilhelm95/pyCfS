@@ -4,6 +4,9 @@ The aggregation of Lichtarge Lab genotype-phenotype validation experiments
 #### Installation
 pip install git+https://github.com/kevwilhelm95/pyCfS.git
 
+#### Examples
+See "example.ipynb" for help
+
 #### Parallelization notes
 Parallelized functions require the user to run function under blocking guard (i.e. if __name__ == "__main__":)
 
@@ -27,7 +30,7 @@ Parallelized functions require the user to run function under blocking guard (i.
 ### pyCFS.Clinical
 |   Function    |   Required arguments |   Optional parameters |   Returns  |   Parallelized?   |
 |---------------|----------------------|-----------------------|------------|-------------------|
-| mouse_phenotype_enrichment |1. query (list): List of genes | 1. background (str): Background gene set (Default = ensembl. Options = ensembl, Reactomes)<br>2. random_iter (int): Iterations for background runs (Default = 5000).<br>3. plot_sig_color (str): Color for strip_plot significant genes (Default = red).<br>4. plot_q_threshold (float): Significance threshold for strip_plot (Default = 0.05).<br>5. plot_show_labels (bool): Choose to plot labels. If true, must also provide labels in plot_labels_to_show (Default = False).<br>6. plot_labels_to_show (list): Phenotype labels to plot. Use "modelPhenotypeLabel" in output dataframe.<br>7. cores (int): Default = 1.<br>7. savepath (str): Path to save. No files saved if empty. | 1. pd.DataFrame: Summary of enrichments.<br>2. Image: Strip plot of enrichment.<br>3. Image: Histogram of FDR values. | Yes|
+| mouse_phenotype_enrichment |1. query (list): List of genes | 1. background (str): Background gene set (Default = ensembl. Options = ensembl, Reactomes)<br>2. random_iter (int): Iterations for background runs (Default = 5000).<br>3. plot_sig_color (str): Color for strip_plot significant genes (Default = red).<br>4. plot_q_threshold (float): Significance threshold for strip_plot (Default = 0.05).<br>5. plot_show_labels (bool): Choose to plot labels. If true, must also provide labels in plot_labels_to_show (Default = False).<br>6. plot_labels_to_show (list): Phenotype labels to plot. Use "modelPhenotypeLabel" in output dataframe.<br>7. plot_fontface (str): Default = Avenir.<br>8. plot_fontsize (int):Default = 14.<br>9. cores (int): Default = 1.<br>10. savepath (str): Path to save. No files saved if empty. | 1. pd.DataFrame: Summary of enrichments.<br>2. Image: Strip plot of enrichment.<br>3. Image: Histogram of FDR values. | Yes|
 | protein_family_enrichment | Coming | Coming | Coming | Coming |
 | tissue_expression_enrichment | Coming | Coming | Coming | Coming|
 | depmap_enrichment | Coming | Coming | Coming | Coming|

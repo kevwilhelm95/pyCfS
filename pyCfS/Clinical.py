@@ -451,7 +451,7 @@ def _process_df(df:pd.DataFrame, q_cut:float) -> pd.DataFrame:
 
     return df
 
-def _mgi_strip_plot(df:pd.DataFrame, pheno_of_interest:list, sig_dot_color:str, show_labels:bool, q_cut:float) -> Image:
+def _mgi_strip_plot(df:pd.DataFrame, pheno_of_interest:list, sig_dot_color:str, show_labels:bool, q_cut:float, fontface:str, fontsize:int) -> Image:
     """
     Creates a strip plot of the given dataframe with significant dots colored in a specified color.
     Args:
@@ -474,6 +474,8 @@ def _mgi_strip_plot(df:pd.DataFrame, pheno_of_interest:list, sig_dot_color:str, 
     custom_palette = {f'FDR<{q_cut}':sig_dot_color, f'FDR>{q_cut}':'grey'}
 
     # Strip plot
+    plt.rcParams.update({'font.size': fontsize,
+                         'font.family': fontface})
     _, ax = plt.subplots(figsize = (20, 5))
     ax = sns.stripplot(data = df,
                         y = '-log10(FDR)',
@@ -646,7 +648,7 @@ def _get_fdr_plot(summary_matrix:pd.DataFrame, bin_size:float, x_min:float, x_ma
     plt.close()
     return image
 
-def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image):
+def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image):
     """
     Performs a phenotype enrichment analysis on a list of genes using the Mouse Genome Informatics (MGI) database.
 
@@ -706,7 +708,9 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
         plot_labels_to_show,
         plot_sig_color,
         plot_show_labels,
-        plot_q_threshold
+        plot_q_threshold,
+        plot_fontface,
+        plot_fontsize
     )
     z_dist_plot = _get_zdist_plot(summary_df, 0.5, 10)
     p_val_plot = _get_pval_plot(summary_df, 0.0005, 0, 0.01)
@@ -721,6 +725,17 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
         fdr_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_FdrDist.png")
 
     return summary_df, strip_plot, fdr_plot
+#endregion
+
+
+
+#region Protein Family
+def _asd():
+    x = 1
+
+def protein_family_enrichment(query:list):
+    x = 1
+
 #endregion
 
 
