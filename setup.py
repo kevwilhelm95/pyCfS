@@ -24,5 +24,6 @@ setuptools.setup(
         'Programming Language :: Python :: 3.8'
     ],
     include_package_data = True,
-    package_data = {'':['data/*.feather', 'data/*.txt', 'data/*.gmt', 'data/*.csv']}
+    package_data = {'':['data/*.feather', 'data/*.txt', 'data/*.gmt', 'data/*.csv',
+                        'data/mousePhenotypes/*.parquet']}
 )
