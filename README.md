@@ -185,6 +185,24 @@ Yes
 Yes
 
 ### `protein_family_enrichment()`
+#### Parameters:
+- `query` (list): List of genes
+- **Optional**:
+    - `background` (str): Background gene set. Options include 'ensembl', 'Reactomes' (Default = ensembl).
+    - `level` (list): Levels to test. Options include "all", "level1", "level2", "level3", "level4", "level5" (Default = ["all"])
+    - `random_iter` (int): Number of background iterations (Default = 5000).
+    - `plot_q_cut` (float): Plot significance threshold (Default = 0.05).
+    - `plot_sig_dot_color` (str): Color of significant dots in plot (Default = red).
+    - `plot_fontface` (str): Default = Avenir.
+    - `plot_fontsize` (int): Default = 14.
+    - `cores` (int): For parallelization (Default = 1).
+    - `savepath` (str): File path
+#### Returns:
+- `pd.DataFrame` : Enrichment dataframe for protein families.
+- `Image` : Horizontal strip plot of enrichment.
+#### Parallelized:
+Yes
+
 ### `tissue_expression_enrichment()`
 ### `depmap_enrichment()`
 ### `drug_targets()`
