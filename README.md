@@ -10,6 +10,20 @@ See "example.ipynb" for help
 #### Parallelization notes
 Parallelized functions require the user to run function under blocking guard (i.e. if __name__ == "__main__":)
 
+#### Available Methods
+- `pyCFS.Combine`
+    - `consensus`
+    - `functional_clustering`
+    - `statistical_combination`
+- `pyCFS.GoldStandards`
+    - `goldstandard_overlap`
+    - `interconnectivity`
+    - `gwas_catalog_colocalization`
+    - `pubmed_comentions`
+- `pyCFS.Clinical`
+    - `mouse_phenotype_enrichment`
+    - `protein_family_enrichment`
+
 # Modules
 
 ## pyCFS.Combine
