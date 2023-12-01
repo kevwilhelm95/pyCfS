@@ -37,6 +37,45 @@ def _load_grch38_background(just_genes:bool = True) -> Any:
     else:
         df.set_index('gene', inplace = True)
         return df
+
+def _merge_random_counts(random_counts_iterations:list) -> dict:
+    """
+    Merge the counts from multiple iterations of random sampling.
+
+    Args:
+    random_counts_iterations (list): A list of dictionaries, where each dictionary contains the counts for a single iteration of random sampling.
+
+    Returns:
+    dict: A dictionary containing the merged counts from all iterations of random sampling.
+    """
+    merged_counts = {}
+    for i in random_counts_iterations:
+        for k, v in i.items():
+            if k in merged_counts:
+                merged_counts[k].append(v)
+            else:
+                merged_counts[k] = [v]
+    return merged_counts
+
+def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
+    """
+    Calculates the average and standard deviation of the values in a dictionary of random counts.
+
+    Args:
+    random_counts_merged (dict): A dictionary containing the merged random counts.
+
+    Returns:
+    A tuple containing two dictionaries: the first dictionary contains the average values for each key in the input dictionary,
+    and the second dictionary contains the standard deviation values for each key in the input dictionary.
+    """
+    avg_dict = {}
+    std_dict = {}
+    for k, v in random_counts_merged.items():
+        avg_dict[k] = np.mean(v)
+        std_dict[k] = np.std(v)
+    return avg_dict, std_dict
+
+
 #endregion
 
 
@@ -227,43 +266,6 @@ def _get_representation_matched_random_gene_set(background_genes:list, mgi_rep_d
         x = generator.choice(rep_matched_genes, v, replace=False).tolist()
         random_genes.extend(x)
     return random_genes
-
-def _merge_random_counts(random_counts_iterations:list) -> dict:
-    """
-    Merge the counts from multiple iterations of random sampling.
-
-    Args:
-    random_counts_iterations (list): A list of dictionaries, where each dictionary contains the counts for a single iteration of random sampling.
-
-    Returns:
-    dict: A dictionary containing the merged counts from all iterations of random sampling.
-    """
-    merged_counts = {}
-    for i in random_counts_iterations:
-        for k, v in i.items():
-            if k in merged_counts:
-                merged_counts[k].append(v)
-            else:
-                merged_counts[k] = [v]
-    return merged_counts
-
-def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
-    """
-    Calculates the average and standard deviation of the values in a dictionary of random counts.
-
-    Args:
-    random_counts_merged (dict): A dictionary containing the merged random counts.
-
-    Returns:
-    A tuple containing two dictionaries: the first dictionary contains the average values for each key in the input dictionary,
-    and the second dictionary contains the standard deviation values for each key in the input dictionary.
-    """
-    avg_dict = {}
-    std_dict = {}
-    for k, v in random_counts_merged.items():
-        avg_dict[k] = np.mean(v)
-        std_dict[k] = np.std(v)
-    return avg_dict, std_dict
 
 def _process_iteration(i:int, random_bkgd:list, mgi_gene_representation:pd.DataFrame, target_representation_counts:dict, mgi_df:pd.DataFrame) -> dict:
     """
@@ -730,11 +732,376 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
 
 
 #region Protein Family
-def _asd():
-    x = 1
+def _get_level_class(x_array:list, level:str) -> str:
+    """
+    Given an array of protein family classes, returns the class at the specified level.
 
-def protein_family_enrichment(query:list):
-    x = 1
+    Args:
+        x_array (list): A list of protein family classes.
+        level (str): The level to retrieve.
+
+    Returns:
+        str: The protein family class at the specified level.
+    """
+    try:
+        for i in x_array:
+            if i['level'] == level:
+                out = i['label']
+                break
+            else:
+                out = 'no_level_assignment'
+    except:
+        out = 'no_level_assignment'
+    return out
+
+def _get_protein_class_data(targets_df: pd.DataFrame, mapping_dict:dict) -> (pd.DataFrame, list):
+    """
+    Retrieves protein class data from the given targets dataframe and mapping dictionary.
+
+    Args:
+        targets_df (pd.DataFrame): The dataframe containing the target data.
+        mapping_dict (dict): The dictionary mapping gene IDs to target classes.
+
+    Returns:
+        pd.DataFrame: The modified targets dataframe with additional columns for level 1 to level 5 classes.
+        list: The list of unique gene IDs corresponding to protein class targets.
+    """
+    targets_df = targets_df[
+        ['id', 'approvedSymbol', 'biotype',
+         'targetClass', 'approvedName']
+    ].copy()
+    targets_df['level1_class'] = targets_df['targetClass'].apply(
+        lambda x: _get_level_class(x, 'l1')
+    )
+    targets_df['level2_class'] = targets_df['targetClass'].apply(
+        lambda x: _get_level_class(x, 'l2')
+    )
+    targets_df['level3_class'] = targets_df['targetClass'].apply(
+        lambda x: _get_level_class(x, 'l3')
+    )
+    targets_df['level4_class'] = targets_df['targetClass'].apply(
+        lambda x: _get_level_class(x, 'l4')
+    )
+    targets_df['level5_class'] = targets_df['targetClass'].apply(
+        lambda x: _get_level_class(x, 'l5')
+    )
+    targets_df['gene_ID'] = targets_df['id'].map(mapping_dict)
+    # the following ENSG IDs have multiple targetClass assignments for the same gene name
+    # these will be omitted so correction is not needed; these represent about 10 genes total
+    ensg_to_drop = [
+        'ENSG00000290203', 'ENSG00000285723', 'ENSG00000285508', 'ENSG00000125863', 'ENSG00000285437','ENSG00000168255', 'ENSG00000287542', 'ENSG00000138641', 'ENSG00000280987', 'ENSG00000015479', 'ENSG00000275596', 'ENSG00000288357', 'ENSG00000258724', 'ENSG00000254093', 'ENSG00000233024',
+        'ENSG00000183889'
+    ]
+    targets_df = targets_df[~targets_df['id'].isin(ensg_to_drop)]
+    targets_df = targets_df[targets_df['biotype'] == 'protein_coding']
+    targets_class_proteins_genes = targets_df['gene_ID'].unique().tolist()
+
+    return targets_df, targets_class_proteins_genes
+
+def _get_family_files(background:str) -> (pd.DataFrame, list, dict):
+    """
+    Load protein family data and clean the protein family table.
+
+    Parameters:
+    background (str): The background data.
+
+    Returns:
+    targets_df (DataFrame): The cleaned protein family table.
+    targets_class_proteins_genes (list): List of unique gene IDs in the protein family table.
+    background_dict (dict): The background data dictionary.
+    """
+    # Load background data
+    mapping_dict, background_dict = _get_gene_mapping(background)
+    # Load protein family data
+    family_ref_stream = pkg_resources.resource_stream(__name__, 'data/targetsFileList.txt')
+    family_ref_df = family_ref_stream.readlines()
+    family_ref_df = [x.decode('utf-8').strip() for x in family_ref_df]
+    targets_df = pd.DataFrame()
+    for f in family_ref_df:
+        target_df_stream = pkg_resources.resource_stream(__name__, 'data/targets/' + f)
+        df = pd.read_parquet(target_df_stream, engine='pyarrow')
+        targets_df = pd.concat([targets_df, df], axis=0)
+    # Get protein class data
+    targets_class_df, targets_class_df_gene_list = _get_protein_class_data(targets_df, mapping_dict)
+    # Get protein class data
+
+    return targets_class_df, targets_class_df_gene_list, background_dict
+
+def _get_level_gene_mappings(targets_df:pd.DataFrame) -> dict:
+    """
+    Returns a dictionary containing mappings of gene IDs based on different levels of classes.
+
+    Parameters:
+    targets_df (pd.DataFrame): DataFrame containing the target data.
+
+    Returns:
+    dict: A dictionary containing mappings of gene IDs based on different levels of classes.
+    """
+    level_class_mappings = {}
+    level_lst = ['level1_class', 'level2_class', 'level3_class', 'level4_class', 'level5_class']
+    for level in level_lst:
+        class_mappings = {}
+        classes = targets_df[level].unique().tolist()
+        for x in classes:
+            df = targets_df[targets_df[level] == x]
+            class_mappings[x] = df['gene_ID'].tolist()
+        level_class_mappings[level] = class_mappings
+    return level_class_mappings
+
+def _map_level(level: list) -> list:
+    """
+    Maps the input level list to the corresponding levels.
+
+    Args:
+        level (list): The input level list.
+
+    Returns:
+        list: The mapped levels.
+    """
+    if 'all' in level:
+        levels = ['level1', 'level2', 'level3', 'level4', 'level5']
+    else:
+        levels = level
+    return levels
+
+def _get_target_class_counts(matrix: pd.DataFrame, gene_list: list, class_level: str) -> dict:
+    """
+    Get the counts of target classes for a given gene list at a specific class level.
+
+    Args:
+        matrix (pd.DataFrame): The input matrix containing gene information.
+        gene_list (list): The list of genes to consider.
+        class_level (str): The class level to calculate the counts for.
+
+    Returns:
+        dict: A dictionary containing the counts of target classes.
+
+    """
+    level_dict = {'level1': 'level1_class', 'level2': 'level2_class', 'level3': 'level3_class', 'level4': 'level4_class',
+                  'level5': 'level5_class'}
+    matrix = matrix[matrix['gene_ID'].isin(gene_list)]
+    df = pd.DataFrame(matrix.groupby(level_dict[class_level])['gene_ID'].count())
+    df.rename(columns={'gene_ID': 'freq'}, inplace=True)
+    df_dict = df.to_dict()['freq']
+    return df_dict
+
+def _get_random_gene_set(background_genes:list, target_genes:list, iter:int) -> list:
+    """
+    Returns a random gene set from the background genes list with the same length as the target genes list.
+
+    Parameters:
+    background_genes (list): List of background genes to choose from.
+    target_genes (list): List of target genes to match the length of the random gene set.
+    iter (int): Seed value for random number generation.
+
+    Returns:
+    list: Random gene set with the same length as the target genes list.
+    """
+    rng = np.random.default_rng(seed=iter**2)
+    return rng.choice(background_genes, len(target_genes), replace=False).tolist()
+
+def _get_random_iteration_class_counts(background_type:str, background_dict:dict, target_genes:list, targets_df:pd.DataFrame, level:str, random_iter:int, cores:int) -> dict:
+    """
+    Get the average and standard deviation of target class counts for multiple random iterations.
+
+    Parameters:
+    background_type (str): The type of background for random gene selection.
+    background_dict (dict): A dictionary containing different types of background gene sets.
+    target_genes (list): A list of target genes.
+    targets_df (pd.DataFrame): A DataFrame containing target gene information.
+    level (str): The level of target gene classification.
+    random_iter (int): The number of random iterations.
+    cores (int): The number of worker processes to use for parallelization.
+
+    Returns:
+    dict: A dictionary containing the average and standard deviation of target class counts for random iterations.
+    """
+    random_bkgd = background_dict[background_type]
+    random_counts_iterations = []
+
+    with multiprocessing.Pool(processes=cores) as pool:
+        results = []
+        for i in range(random_iter):
+            result = pool.apply_async(_get_random_gene_set, (random_bkgd, target_genes, i))
+            results.append(result)
+
+        for result in results:
+            random_genes = result.get()
+            random_counts = _get_target_class_counts(targets_df, random_genes, level)
+            random_counts_iterations.append(random_counts)
+
+    random_counts_merged = _merge_random_counts(random_counts_iterations)
+
+    random_counts_avg, random_counts_std = _get_avg_and_std_random_counts(random_counts_merged)
+
+    return {'random_avg':random_counts_avg, 'random_std':random_counts_std}
+
+def _get_family_output_matrix(target_counts:dict, random_dict:dict, target_class_level_gene_mappings:dict, target_genes:list, level:str) -> pd.DataFrame:
+    """
+    Generate a summary DataFrame for family output matrix.
+
+    Args:
+        target_counts (dict): A dictionary containing target counts.
+        random_dict (dict): A dictionary containing random averages and standard deviations.
+        target_class_level_gene_mappings (dict): A dictionary containing target class level gene mappings.
+        target_genes (list): A list of target genes.
+        level (str): The level of the class.
+
+    Returns:
+        pd.DataFrame: A summary DataFrame for family output matrix.
+    """
+    summary_df = pd.DataFrame.from_dict(target_counts, orient='index', columns=['Freq'])
+    summary_df['RandomAvgFreq'] = summary_df.index.map(random_dict['random_avg'])
+    summary_df['RandomStdFreq'] = summary_df.index.map(random_dict['random_std'])
+    summary_df['z-score'] = summary_df.apply(
+        lambda x: _z_score(
+            x['RandomAvgFreq'],
+            x['RandomStdFreq'],
+            x['Freq']
+        ), axis=1
+    )
+
+    summary_df = summary_df[summary_df['z-score'] != 'no_z-score']
+    summary_df['z-score'] = summary_df['z-score'].apply(pd.to_numeric, errors='coerce')
+    summary_df['pvalue'] = norm.sf(abs(summary_df['z-score'])) * 2
+    summary_df = summary_df.dropna(subset=['pvalue'], axis=0)
+    summary_df = summary_df[summary_df['RandomStdFreq'] != 0]
+    summary_df = _or_fdr(summary_df)
+
+    level_dict = {'level1':'level1_class', 'level2':'level2_class', 'level3':'level3_class', 'level4':'level4_class',
+                  'level5':'level5_class'}
+    summary_df['geneMappings'] = summary_df.index.map(
+        target_class_level_gene_mappings[level_dict[level]]
+    )
+    summary_df['geneMappings'] = summary_df['geneMappings'].apply(
+        lambda x: [y for y in x if y in target_genes]
+    )
+    return summary_df
+
+def _protein_class_strip_plot(df:pd.DataFrame, q_cut:float, sig_dot_color:str, fontsize:int, fontface:str) -> Image:
+    """
+    Generate a strip plot to visualize protein class levels and their significance.
+
+    Parameters:
+    df (pd.DataFrame): The input DataFrame containing protein class data.
+    q_cut (float): The significance threshold for determining significance.
+    sig_dot_color (str): The color of significant dots in the plot.
+    fontsize (int): The font size for the plot.
+    fontface (str): The font face for the plot.
+
+    Returns:
+    Image: The generated strip plot as an Image object.
+    """
+    # clean
+    df = df.copy()
+    levels_name_map = {'level1':'Level 1', 'level2':'Level 2', 'level3':'Level 3', 'level4':'Level 4', 'level5':'Level 5'}
+    df['Level'] = df['Level'].map(levels_name_map)
+    df = df[df.index != 'no_level_assignment']
+    df['-log10(FDR)'] = -np.log10(df.fdr)
+    df['Significance'] = np.where(df['fdr'] < q_cut, f'FDR<{q_cut}', f'FDR>{q_cut}')
+    custom_palette = {f'FDR<{q_cut}':sig_dot_color, f'FDR>{q_cut}':'grey'}
+
+    # Plot results
+    plt.rcParams.update({'font.size': fontsize,
+                        'font.family': fontface})
+    _, ax = plt.subplots(figsize = (5,7))
+    ax = sns.stripplot(data = df,
+                        y = 'Level',
+                        x = '-log10(FDR)',
+                        hue = 'Significance',
+                        palette = custom_palette,
+                        edgecolor = 'black',
+                        s = 10,
+                        linewidth = 0.5
+                        )
+    # Set axis labels
+    ax.set_ylabel('Protein Class Levels')
+    ax.set_xlabel(ax.get_xlabel())
+
+    # Plot significance threshold
+    q_plot = -np.log10(q_cut)
+    plt.axvline(x = q_plot, linestyle = '--', color = 'black', linewidth = 1, label = f"FDR = {q_cut}")
+
+    # Fix legend
+    #legend = plt.legend(loc='center left', bbox_to_anchor=(1.5, 0.6))
+    legend = ax.legend(loc = 'upper right')
+    for handle in legend.legendHandles:
+        try: handle.set_sizes([100])
+        except AttributeError:
+            continue
+    plt.tight_layout()
+    # Save plot
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format = 'png', dpi = 300)
+    buffer.seek(0)
+    image = Image.open(buffer)
+    plt.close()
+    return image
+
+def protein_family_enrichment(query:list, background:str = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image):
+    """
+    Perform protein family enrichment analysis.
+
+    Args:
+        query (list): List of genes to analyze.
+        background (str, optional): Background gene set. Defaults to 'ensembl'.
+        level (list, optional): List of levels to analyze. Defaults to ['all'].
+        random_iter (int, optional): Number of random iterations. Defaults to 5000.
+        plot_q_cut (float, optional): Q-value cutoff for plotting. Defaults to 0.05.
+        plot_sig_dot_color (str, optional): Color of significant dots in the plot. Defaults to 'red'.
+        plot_fontface (str, optional): Font face for the plot. Defaults to 'Avenir'.
+        plot_fontsize (int, optional): Font size for the plot. Defaults to 14.
+        cores (int, optional): Number of CPU cores to use. Defaults to 1.
+        savepath (Any, optional): Path to save the results. Defaults to False.
+
+    Returns:
+        pd.DataFrame: Summary dataframe of the enrichment analysis.
+        Image: Plot of the enrichment analysis.
+    """
+    # Get input data
+    targets_class_df, targets_class_df_genelist, background_dict = _get_family_files(background)
+    # Get Level mappings
+    target_class_level_gene_mappings = _get_level_gene_mappings(targets_class_df)
+    print('{}/{} target genes in Open Targets'.format(
+        len([x for x in query if x in targets_class_df_genelist]),
+        len(query))
+    )
+    # Loop through each level
+    levels = _map_level(level)
+    out_level_dict = {}
+    for j in levels:
+        # Get target class counts
+        target_genes_class_counts = _get_target_class_counts(targets_class_df, query, j)
+        ##### How do I do all the levels? I thought this ran everything
+        #random iterations set at 5000x
+        random_iter_dict = _get_random_iteration_class_counts(
+            background,
+            background_dict,
+            query,
+            targets_class_df,
+            j,
+            random_iter,
+            cores
+        )
+        # Get summary matrix
+        summary_df = _get_family_output_matrix(
+            target_genes_class_counts,
+            random_iter_dict,
+            target_class_level_gene_mappings,
+            query,
+            j
+        )
+
+        summary_df['Level'] = j
+        out_level_dict[j] = summary_df
+    # Merge all levels
+    summary_df = pd.concat(out_level_dict.values(), axis=0)
+    # Generate plots
+    plot = _protein_class_strip_plot(summary_df, plot_q_cut, plot_sig_dot_color, plot_fontsize, plot_fontface)
+    if savepath:
+        summary_df.to_csv(savepath + 'Open-Targets_ProteinClass-' + ",".join(level) + '_Enrichment.csv')
+        plot.save(savepath + "Open-Targets_ProteinClass-" + ",".join(level) + "_Enrichment.png")
+    return summary_df, plot
 
 #endregion
 
