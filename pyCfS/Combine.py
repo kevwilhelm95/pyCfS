@@ -257,7 +257,7 @@ def _upset_plot(result_dict:dict, fontsize:int, fontface:str) -> Image:
 
     return image
 
-def consensus(genes_1:list, genes_2:list, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image):
+def consensus(genes_1:list, genes_2:list, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image):
     """
     Combines multiple lists of genes, excluding NaNs, counts occurrences of each gene, and tracks the lists they came from.
 
@@ -281,8 +281,9 @@ def consensus(genes_1:list, genes_2:list, genes_3: list = False, genes_4:list = 
     >>> consensus_df = consensus(genes_1, genes_2)
     """
     result_dict = defaultdict(lambda: {'count':0, 'lists':set()})
-    gene_lists = [genes_1, genes_2, genes_3, genes_4, genes_5, genes_6]
-    gene_dict = _format_input_dict(list_names, gene_lists)
+    if isinstance(gene_dict, bool):
+        gene_lists = [genes_1, genes_2, genes_3, genes_4, genes_5, genes_6]
+        gene_dict = _format_input_dict(list_names, gene_lists)
     # Plot upset plot
     upset_plot = _upset_plot(gene_dict, plot_fontsize, plot_fontface)
     # Count gene occurrences
@@ -1461,7 +1462,7 @@ def _p_multiply(df: pd.DataFrame) -> pd.DataFrame:
     df['p.multiply'] = sub_df.prod(axis=1)
     return df
 
-def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
+def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, gene_df:pd.DataFrame = False, list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
     """
     Combines statistical data from multiple DataFrames using various statistical methods.
 
@@ -1505,14 +1506,17 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     >>> df_combined = statistical_combination(df_1, df_2, df_3=df_3, savepath="path/to/save/")
     """
     # Prepare input
-    df_dict = {}
-    df_list = [x for x in [df_1, df_2, df_3, df_4, df_5, df_6] if x is not False]
-    if list_names:
-        for j in range(len(list_names)):
-            df_dict[list_names[j]] = df_list[j]
+    if isinstance(gene_df, bool):
+        df_dict = {}
+        df_list = [x for x in [df_1, df_2, df_3, df_4, df_5, df_6] if x is not False]
+        if list_names:
+            for j in range(len(list_names)):
+                df_dict[list_names[j]] = df_list[j]
+        else:
+            df_dict = {1:df_1, 2:df_2, 3:df_3, 4:df_4, 5:df_5, 6:df_6}
+        clean_df = _merge_p_inputs(df_dict)
     else:
-        df_dict = {1:df_1, 2:df_2, 3:df_3, 4:df_4, 5:df_5, 6:df_6}
-    clean_df = _merge_p_inputs(df_dict)
+        clean_df = gene_df.copy()
     # Calculate CCT, minP
     df = _cauchy_combination_test(clean_df)
     df = _min_p(df)
