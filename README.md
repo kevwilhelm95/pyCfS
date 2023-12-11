@@ -38,6 +38,7 @@ Combines multiple lists of genes, counts occurrences of each gene, and tracks th
   - `genes_4` (list): Additional list of genes.
   - `genes_5` (list): Additional list of genes.
   - `genes_6` (list): Additional list of genes.
+  - `gene_dict` (dict): Dict of gene lists if more than 6. {Name: [gene1, gene2, ...]} format
   - `list_names` (list): Names of your lists (Default set to "set_x").
   - `plot_fontface` (str): Font for upset plot (Default = Avenir).
   - `plot_fontsize` (int): Font size for upset plot (Default = 14).
@@ -83,6 +84,7 @@ Statistical p-value combination methods
     - `df_4` (pd.DataFrame): Additional two-column df.
     - `df_5` (pd.DataFrame): Additional two-column df.
     - `df_6` (pd.DataFrame): Additional two-column df.
+    - `gene_df` (pd.DataFrame): Dataframe of p-values if more than 6. Column 1 = 'gene' (gene names). Column 2-x = 'p_{name}' (p-values).
     - `savepath` (str): File path. No files saved if not provided.
 #### Returns:
 - `pd.DataFrame` : Dataframe containing genes, their original p-values, and p-value combinations for Cauchy, MinP, CMC, MCM, and multiplied p-values.
