@@ -31,19 +31,19 @@ Parallelized functions require the user to run function under blocking guard (i.
 ### `consensus()`
 Combines multiple lists of genes, counts occurrences of each gene, and tracks the lists they came from.
 #### Parameters:
-- `genes_1` (list): List of genes.
-- `genes_2` (list): List of genes.
 - **Optional**:
-  - `genes_3` (list): Additional list of genes.
-  - `genes_4` (list): Additional list of genes.
-  - `genes_5` (list): Additional list of genes.
-  - `genes_6` (list): Additional list of genes.
-  - `gene_dict` (dict): Dict of gene lists if more than 6. {Name: [gene1, gene2, ...]} format
-  - `list_names` (list): Names of your lists (Default set to "set_x").
-  - `plot_fontface` (str): Font for upset plot (Default = Avenir).
-  - `plot_fontsize` (int): Font size for upset plot (Default = 14).
-  - `savepath` (str): Path to save files. If no path provided, files are not saved.
-#### Returns:
+    - `gene_dict` (dict): Dict of gene lists if more than 6. {Name: [gene1, gene2, ...]} format
+    - `genes_1` (list): List of genes.
+    - `genes_2` (list): List of genes.
+    - `genes_3` (list): Additional list of genes.
+    - `genes_4` (list): Additional list of genes.
+    - `genes_5` (list): Additional list of genes.
+    - `genes_6` (list): Additional list of genes.
+    - `list_names` (list): Names of your lists (Default set to "set_x").
+    - `plot_fontface` (str): Font for upset plot (Default = Avenir).
+    - `plot_fontsize` (int): Font size for upset plot (Default = 14).
+    - `savepath` (str): Path to save files. If no path provided, files are not saved.
+    #### Returns:
 - `pd.DataFrame`: A dataframe with columns 'gene', 'occurrences', and 'lists', detailing each unique gene, the number of its occurrences, and the lists it appeared in.
 - `Image`: Upset plot showing overlap between input genelists.
 #### Parallelized:
@@ -53,8 +53,8 @@ No
 Clusters genes from multiple sources in STRING network 
 #### Parameters:
 - `genes_1` (list): list of genes
-- `genes_2` (list): list of genes
 - **Optional**:
+    - `genes_2` (list): list of genes
     - `genes_3` (list): Additional list of genes.
     - `genes_4` (list): Additional list of genes.
     - `genes_5` (list): Additional list of genes.
@@ -160,6 +160,7 @@ Yes
 - `query` (list): List of genes.
 - `keyword` (str): Keyword to search co-mentions for.
 - **Optional**:
+    - `background_genes` (list): List of genes for background enrichment. Default = 19,894 human genes from ENSEMBL-lit_GRCh38.v94.
     - `email` (str): Email of a PubMed account. (Default = my email).
     - `api_key` (str): API key of PubMed account. (Default = my key).
     - `enrichment_trials` (int): # of randomization trials (Default = 100).
