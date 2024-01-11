@@ -1584,7 +1584,7 @@ def _parse_entrez_result(result:dict) -> (str, int):
     except KeyError:
         try:
             gene = result['WarningList']['QuotedPhraseNotFound'][0].split('"')[1]
-            n_paper_dis = np.nan
+            n_paper_dis = 0
         except KeyError:
             gene = result['QueryTranslation'].split('"')[1]
             n_paper_dis = int(result['Count'])
@@ -1612,6 +1612,10 @@ def _fetch_query_pubmed(query: list, keyword: str, email: str, api_key: str, fie
     # Initialize data frames to store the query results and output data
     out_df = pd.DataFrame(columns=['Count', 'PMID for Gene + ' + str(keyword)], index=query)
 
+    # Check field validity
+    if field not in ['all', 'title/abstract', 'title']:
+        raise ValueError(f"Invalid field selection '{field}'. Select a permitted field type: all, title/abstract, title")
+
     # Execute concurrent API calls to PubMed
     with concurrent.futures.ThreadPoolExecutor(max_workers=cores) as executor:
         results = executor.map(_entrez_search, query, repeat(keyword), repeat(email), repeat(api_key), repeat(field))
@@ -1627,7 +1631,7 @@ def _fetch_query_pubmed(query: list, keyword: str, email: str, api_key: str, fie
 
     return sorted_out_df
 
-def _fetch_random_pubmed(query: list, disease_query: str, email: str, api_key: str, cores: int, field:str, trials: int = 100) -> list:
+def _fetch_random_pubmed(query: list, disease_query: str, email: str, api_key: str, cores: int, field:str, trials:int, background_genes:list) -> list:
     """
     Performs PubMed queries on random sets of genes and records the number of papers
     associated with a disease for each gene in the set.
@@ -1645,7 +1649,8 @@ def _fetch_random_pubmed(query: list, disease_query: str, email: str, api_key: s
         List[pd.DataFrame]: A list of DataFrames, each containing the count of papers for a random gene set.
     """
     randfs = []
-    background_genes = _load_grch38_background()
+    if len(background_genes) == 0:
+        background_genes = _load_grch38_background()
     print(f'Pulling Publications for {trials} random gene sets of {len(query)} genes')
 
     for i in range(trials):
@@ -1698,22 +1703,31 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
     """
     plt.rcParams.update({'font.size': fontsize,
                          'font.family': fontface})
-    _, _ = plt.subplots(figsize=(6, 3.5), facecolor='white', frameon=False)
+    _, _ = plt.subplots(figsize=(6, 3.5), facecolor='white') #frameon = False
     y,_, _ = plt.hist(background, color=random_color)
     plt.axvline(x=observation, ymax=0.5, linestyle='dotted', color=query_color)
-    plt.text(x=observation*0.99, y=(y.max()/1.95), s='{}/{} (Z = {})'.format(observation, len(query), round(z, 2)), color='red', ha='right')
+    
+    # Orient the annotation
+    values = background
+    values.append(observation)
+    if observation >= np.mean(values):
+        ha_hold = 'right'
+    else:
+        ha_hold = 'left'
+    plt.text(x=observation*0.99, y=(y.max()/1.8), s='{}/{} (Z = {})'.format(observation, len(query), round(z, 2)), color='red', ha=ha_hold)
     plt.xlabel('# of Genes with {}-{} Co-Mentions with "{}"'.format(paper_thrshld[0]+1, paper_thrshld[1], disease_query), fontsize=15)
     plt.ylabel('# of Random Occurrences', fontsize=15)
+    plt.tight_layout()
     # Return image
     buffer = io.BytesIO()
-    plt.savefig(buffer, format = 'png', bbox_inches = 'tight', pad_inches = 0.1, dpi = 300)
+    plt.savefig(buffer, format = 'png', dpi = 300) # bbox_inches = 'tight', pad_inches = 0.1
     buffer.seek(0)
     image = Image.open(buffer)
     plt.close()
 
     return image
 
-def pubmed_comentions(query:list, keyword: str, field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict):
+def pubmed_comentions(query:list, keyword: str, background_genes: list = [], field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict):
     """
     Searches PubMed for comention of genes within articles related to a given field and
     performs a randomization test to compute Z-scores for observed mention counts.
@@ -1743,11 +1757,13 @@ def pubmed_comentions(query:list, keyword: str, field:str = 'all', email:str = '
 
     # Pull co_mentions for a random set of genes
     if run_enrichment:
-        rand_dfs = _fetch_random_pubmed(query, keyword, email, api_key, workers, field, enrichment_trials)
+        rand_dfs = _fetch_random_pubmed(query, keyword, email, api_key, workers, field, enrichment_trials, background_genes)
         enrich_results, enrich_images = {}, {}
+        rand_result_df = pd.DataFrame({'Iteration': range(0, len(rand_dfs))})
         for min_thresh, max_thresh in enrichment_cutoffs:
             observation = query_comention_df[(query_comention_df['Count'] > min_thresh) & (query_comention_df['Count'] <= max_thresh)].shape[0]
             background = [tmp[(tmp['Count'] > min_thresh) & (tmp['Count'] <= max_thresh)].shape[0] for tmp in rand_dfs]
+            rand_result_df[f"{min_thresh + 1},{max_thresh}"] = background
             # Calculate Z scores
             z_score = _calculate_z_score(observation, background)
             # Plot results
@@ -1760,13 +1776,14 @@ def pubmed_comentions(query:list, keyword: str, field:str = 'all', email:str = '
 
     if savepath:
         query_comention_df.to_csv(savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
+        rand_result_df.to_csv(savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
         for key, value in enrich_images.items():
             value.save(savepath + f"PubMedQueryPlot_keyword-{keyword}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
         # Write results to file
-        for key,value in enrich_results.items():
-            with open(savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
+        with open(savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
+            for key,value in enrich_results.items():
                 f.write(f">{key[0] + 1} & <={key[1]} Comentions = {value[0]} (Z = {value[1]})\n")
-                f.close()
+            f.close()
     return query_comention_df, enrich_results, enrich_images
 #endregion
 

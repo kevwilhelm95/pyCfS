@@ -257,7 +257,7 @@ def _upset_plot(result_dict:dict, fontsize:int, fontface:str) -> Image:
 
     return image
 
-def consensus(genes_1:list, genes_2:list, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image):
+def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image):
     """
     Combines multiple lists of genes, excluding NaNs, counts occurrences of each gene, and tracks the lists they came from.
 
@@ -282,6 +282,8 @@ def consensus(genes_1:list, genes_2:list, genes_3: list = False, genes_4:list = 
     """
     result_dict = defaultdict(lambda: {'count':0, 'lists':set()})
     if isinstance(gene_dict, bool):
+        if isinstance(genes_1, bool):
+            raise ValueError("At least one gene list must be provided. Define genes_1 or gene_dict.")
         gene_lists = [genes_1, genes_2, genes_3, genes_4, genes_5, genes_6]
         gene_dict = _format_input_dict(list_names, gene_lists)
     # Plot upset plot
@@ -1092,8 +1094,11 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
         for k, v in cluster_dict.items():
             try:
                 summary_df = v
+                #print(f"1) Summary_df index: {summary_df.index}")
                 summary_df['RandomIterationTopPvals'] = summary_df.index.map(pval_merged_tuple_set[biological_group])
+                #print(f"2) Summary_df index: {summary_df.index}")
                 summary_df['TrueClusterRanking'] = summary_df.apply(lambda x: _annotate_percentile_of_score(x['pval'], x['RandomIterationTopPvals']), axis = 1)
+                #print(f"3) Summary_df index: {summary_df.index}")
                 if k not in new_dict:
                     new_dict[k] = {}
                 new_dict[k][biological_group] = summary_df
@@ -1101,7 +1106,7 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
                 continue
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict):
+def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict):
     """
     Perform functional clustering analysis on a set of genes.
 
@@ -1187,11 +1192,15 @@ def functional_clustering(genes_1: list, genes_2: list, genes_3: Any = False, ge
             combo_df = False
             for biological_group, df in sub_dict.items():
                 df['biological_group'] = biological_group
+                df['pathway'] = df.index
+                column_order = ['pathway'] + [col for col in df if col != 'pathway']
+                df = df[column_order]
                 if combo_df is False:
                     combo_df = df
                 else:
                     combo_df = pd.concat([combo_df, df], axis=0, ignore_index=True)
                 df.to_csv(enrich_save_path + cluster_num + '_' + biological_group + '_enrichment.csv', index = False)
+            combo_df = combo_df.sort_values(by=['qval', 'biological_group'], ascending = True)
             combo_df.to_csv(enrich_save_path + cluster_num + '_combo_enrichment.csv', index = False)
 
     return true_gene_network, true_cluster_df, true_clusters_enrichment_df_dict
