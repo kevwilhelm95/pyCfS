@@ -302,6 +302,7 @@ def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False,
     df = df.sort_values(by='occurrences', ascending=False)
     # Save and output
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         df.to_csv(savepath + "ConsensusGenes.csv", index=False)
         upset_plot.save(savepath + "UpsetPlot.png", bbox_inches='tight', pad_inches=0.5)
     return df, upset_plot
@@ -1174,8 +1175,7 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         pval_merged_tuple_set
     )
     if savepath:
-        # Save sources of input genes
-        #pd.DataFrame.from_dict(gene_sources, orient = 'index').to_csv(savepath + 'GeneSet_Sources.csv', header = False)
+        os.makedirs(savepath, exist_ok=True)
         # Save true gene network
         true_gene_network.to_csv(savepath + 'GeneSetNetwork.csv', index = False)
         # save true_cluster_dict
@@ -1535,6 +1535,7 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     # Calcualte control - p-value multiplication
     df = _p_multiply(df)
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         df.to_csv(savepath + "StatisticalCombination.csv", index = False)
 
     return df

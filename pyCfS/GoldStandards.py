@@ -6,6 +6,7 @@ Functions:
 
 import pkg_resources
 import io
+import os
 import requests
 import time
 from multiprocessing import Pool
@@ -397,6 +398,7 @@ def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 
     image = _plot_overlap_venn(len(query), len(goldstandard), overlapping_genes, pval, plot_query_color, plot_goldstandard_color, plot_fontsize, plot_fontface)
     # Output files
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         if image:
             image.save(savepath + "GoldStandard_Overlap.png", bbox_inches = 'tight', pad_inches = 0.5)
         with open(savepath + "GoldStandard_Overlap_Summary.txt", 'w') as f:
@@ -942,7 +944,7 @@ def _parallel_random_enrichment(unique_gene_sets:dict, string_net_all_genes:pd.D
 
     return random_sets_connections
 
-def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, savepath:str = 'None', evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict):
+def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict):
     """
     Analyzes gene set interconnectivity and visualizes the results, returning multiple outputs
     including images, lists, and data structures.
@@ -1028,7 +1030,8 @@ def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = No
     venn_image = _gene_set_overlap(gene_sets)
     unique_gene_network = _output_unique_gene_network(query_unique_gene_network, query_unique_genes)
 
-    if savepath != 'None':
+    if savepath:
+        os.makedirs(savepath, exist_ok=True)
         enrich_image.save(savepath + "Interconnectivity_Norm_Plot.png", format = "PNG")
         venn_image.save(savepath + "Interconnectivity_Venn.png", format = "PNG")
         pd.DataFrame({'col': random_sets_connections}).to_csv(savepath + "RandomSetConnections.csv", header = False, index = False)
@@ -1455,6 +1458,7 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     tp, fp, fn, tn, pval = _calculate_fishers_exact(query_snp_dict, bg_gene_dict, final_genes)
     # Output values
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         if save_summary_statistics:
             gwas_catalog.to_csv(savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}.csv", index = True)
         query_snp_df.to_csv(savepath +f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_TP.csv", index = False)
@@ -1775,6 +1779,7 @@ def pubmed_comentions(query:list, keyword: str, background_genes: list = [], fie
         enrich_results, enrich_images = {}, {}
 
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         query_comention_df.to_csv(savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
         rand_result_df.to_csv(savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
         for key, value in enrich_images.items():

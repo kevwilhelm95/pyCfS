@@ -13,6 +13,7 @@ from adjustText import adjust_text
 import seaborn as sns
 from PIL import Image
 import io
+import os
 import math
 import multiprocessing
 
@@ -720,6 +721,7 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
 
     # Output files
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         summary_df.to_csv(savepath + 'MGI_Lower-Level_PhenoEnrichment.csv')
         strip_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment.png")
         z_dist_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_ZscoreDist.png")
@@ -1099,6 +1101,7 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
     # Generate plots
     plot = _protein_class_strip_plot(summary_df, plot_q_cut, plot_sig_dot_color, plot_fontsize, plot_fontface)
     if savepath:
+        os.makedirs(savepath, exist_ok=True)
         summary_df.to_csv(savepath + 'Open-Targets_ProteinClass-' + ",".join(level) + '_Enrichment.csv')
         plot.save(savepath + "Open-Targets_ProteinClass-" + ",".join(level) + "_Enrichment.png")
     return summary_df, plot
