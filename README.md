@@ -8,7 +8,7 @@ pip install git+https://github.com/kevwilhelm95/pyCfS.git
 See "example.ipynb" for help
 
 #### Parallelization notes
-Parallelized functions require the user to run function under blocking guard (i.e. if __name__ == "__main__":)
+Parallelized functions require the user to run function under blocking guard (i.e. if `__name__ == "__main__"`:)
 
 #### Available Methods
 - `pyCFS.Combine`
@@ -23,6 +23,7 @@ Parallelized functions require the user to run function under blocking guard (i.
 - `pyCFS.Clinical`
     - `mouse_phenotype_enrichment`
     - `protein_family_enrichment`
+    - `drug_gene_interactions`
 
 # Modules
 
@@ -222,4 +223,13 @@ Yes
 
 ### `tissue_expression_enrichment()`
 ### `depmap_enrichment()`
-### `drug_targets()`
+### `drug_gene_interactions()`
+#### Parameters:
+- `query` (list): List of genes
+- **Optional**:
+    - `drug_source` (list) : Resource to pull from. Options = 'OpenTargets', 'DGIdb'. Default = ['OpenTargets']
+    - `dgidb_min_citations` (int) : DGIdb-specific. Minimum number of citations noting drug-gene interaction. Default = 1
+    - `approved` (bool) : Filter for FDA-approved or not drugs. Default = True.
+    - `savepath` (str) : File path
+#### Returns:
+ - `dict` : Resource name and drug interactors (e.g. {'DGIdb': pd.DataFrame})
