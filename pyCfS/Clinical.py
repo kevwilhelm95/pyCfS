@@ -9,6 +9,7 @@ from typing import Any
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import norm
 import matplotlib.pyplot as plt
+import requests
 from adjustText import adjust_text
 import seaborn as sns
 from PIL import Image
@@ -76,6 +77,16 @@ def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
         std_dict[k] = np.std(v)
     return avg_dict, std_dict
 
+def _load_open_targets_mapping() -> pd.DataFrame:
+    """
+    Load the open targets mapping data from a file and return it as a pandas DataFrame.
+
+    Returns:
+        pd.DataFrame: The mapping data with columns for ensgID and geneNames.
+    """
+    mapping_stream = pkg_resources.resource_stream(__name__, 'data/biomart_ensgID_geneNames_08162023.txt')
+    mapping_df = pd.read_csv(mapping_stream, sep='\t')
+    return mapping_df
 
 #endregion
 
@@ -95,8 +106,7 @@ def _get_gene_mapping(background_:str) -> (dict, dict):
         1. A dictionary mapping Ensembl gene IDs to gene names
         2. A dictionary containing background genes from Reactome and Ensembl
     """
-    mapping_stream = pkg_resources.resource_stream(__name__, 'data/biomart_ensgID_geneNames_08162023.txt')
-    mapping_df = pd.read_csv(mapping_stream, sep='\t')
+    mapping_df = _load_open_targets_mapping()
     mapping_dict = dict(zip(mapping_df['Gene stable ID'].tolist(), mapping_df['Gene name'].tolist()))
 
     #reactome background genes
@@ -1118,5 +1128,269 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
 
 
 #region DrugBank/OpenTargets Drugs
+def _parse_dgi_db(data):
+    flattened_data = []
+    # Loop through each gene's interactionss
+    for gene_data in data['data']['genes']['nodes']:
+        gene_name = gene_data['name']
+        interactions = gene_data['interactions']
+        # Loop through each interaction
+        for interaction_idx in range(len(interactions)):
+            # Get important holder values
+            interaction_holder = interactions[interaction_idx]
+            drug_name = interaction_holder['drug']['name']
+
+            ### Parse the interaction attributes
+            # Mechanism of Action
+            mechanism_of_action = np.nan
+            for attribute in interaction_holder['interactionAttributes']:
+                if attribute['name'] == 'Mechanism of Action':
+                    mechanism_of_action = attribute['value']
+            # Source databases
+            source_dbs = []
+            for attribute in interaction_holder['sources']:
+                source_dbs.append(attribute['sourceDbName'])
+            # Publications
+            pmids = []
+            for attribute in interaction_holder['publications']:
+                pmids.append(str(attribute['pmid']))
+            # Drug aliases
+            aliases = []
+            for attribute in interaction_holder['drug']['drugAliases']:
+                if attribute['alias'] != drug_name:
+                    aliases.append(attribute['alias'])
+            # Approval Ratings
+            approval_ratings = [x['rating'] for x in interaction_holder['drug']['drugApprovalRatings']]
+            approval_ratings = [x for x in approval_ratings if x not in ['Prescribable', 'Approved', 'Prescription', 'Max Phase 4', 'Not Approved']]
+            approval_ratings = ";".join(approval_ratings)
+            # Drug Class, Indication, and Year of Approval, Developer, Clinical Trial ID
+            drug_class, indications, year_of_app, developer, clinical_trial_id = [], [], [], [], []
+            for attribute in interaction_holder['drug']['drugAttributes']:
+                if attribute['name'] == 'Drug Class':
+                    drug_class.append(attribute['value'])
+                elif attribute['name'] == 'Indication':
+                    indications.append(attribute['value'])
+                elif attribute['name'] == 'Year of Approval':
+                    year_of_app.append(attribute['value'])
+                elif attribute['name'] == 'Developer':
+                    developer.append(attribute['value'])
+                elif attribute['name'] == 'Clinical Trial ID':
+                    clinical_trial_id.append(attribute['value'])
+
+            # Concat results from parsing
+            try:
+                interaction_type = interaction_holder['interactionTypes'][0]['type']
+                directionality_type = interaction_holder['interactionTypes'][0]['directionality']
+                interaction_type = f"{interaction_type} ({directionality_type})"
+            except:
+                interaction_type = np.nan
+
+            # Create entry dictionary
+            interaction_entry = {
+                'gene': gene_name,
+                'drug': drug_name,
+                'drug_concept_id': interaction_holder['drug']['conceptId'],
+                'aliases': ";".join(aliases),
+                'approvalRatings' : approval_ratings,
+                'isApproved' : bool(interaction_holder['drug']['approved']),
+                'drug_class': ";".join(drug_class),
+                'indications': ";".join(indications),
+                'year_of_approval': ";".join(year_of_app),
+                'developer': ";".join(developer),
+                'clinical_trial_id': ";".join(clinical_trial_id),
+                'interaction_score': interaction_holder['interactionScore'],
+                'interaction_direction': interaction_type,
+                'mechanism_of_action': mechanism_of_action,
+                'source_dbs': ";".join(source_dbs),
+                'num_pmids': len(pmids),
+                'pmids': ";".join(pmids)
+            }
+
+            flattened_data.append(interaction_entry)
+
+    df = pd.DataFrame(flattened_data)
+    
+    return df
+
+def _get_dgidb_data(query:list, min_interaction_citations:int, approved: bool) -> pd.DataFrame:
+    """
+    Retrieves interaction data from DGIdb API for a given list of genes.
+    https://www.dgidb.org/api
+
+    Args:
+        query (list): List of gene names to query.
+        min_interaction_citations (int): Minimum number of interaction citations required.
+        approved (bool): Whether to only include approved drugs.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the retrieved interaction data.
+    """
+    url = "https://dgidb.org/api/graphql"
+    gene_array = "[" + ", ".join(f'"{gene}"' for gene in query) + "]"
+    api_query = f"""
+        {{
+        genes(names: {gene_array}) {{
+            nodes {{
+            name
+            interactions {{
+                drug {{
+                name
+                conceptId
+                approved
+                drugAliases {{
+                    alias
+                }}
+                drugApprovalRatings {{
+                    rating
+                }}
+                drugAttributes {{
+                    name
+                    value
+                }}
+                }}
+                interactionScore
+                interactionTypes {{
+                type
+                directionality
+                }}
+                interactionAttributes {{
+                name
+                value
+                }}
+                publications {{
+                pmid
+                }}
+                sources {{
+                sourceDbName
+                }}
+            }}
+            }}
+        }}
+        }}
+        """
+
+    # Make the POST request
+    response = requests.post(url, json={'query': api_query})
+
+    # Check for errors
+    if response.status_code == 200:
+        data = response.json()
+        df = _parse_dgi_db(data)
+        df = df[df['num_pmids'] >= min_interaction_citations]
+        df = df[df['isApproved'] == approved]
+        df = df.sort_values(by = ['num_pmids'], ascending = False)
+    else:
+        print("Query failed to run by returning code of {}.".format(response.status_code))
+
+    return df
+
+def _load_open_targets_drugs() -> pd.DataFrame:
+    """
+    Load the Open Targets drugs data from a parquet file and return it as a DataFrame.
+
+    Returns:
+        pd.DataFrame: The Open Targets drugs data as a DataFrame.
+    """
+    ot_drug_stream = pkg_resources.resource_stream(__name__, 'data/opentarget_drugtargets_08242023.parquet')
+    ot_drug_df = pd.read_parquet(ot_drug_stream, engine='pyarrow')
+
+    columns_to_decode = ['linkedTargets.rows', 'linkedDiseases.rows', 'childChemblIds', 'crossReferences', 'synonyms', 'tradeNames']
+    for col in columns_to_decode:
+        if any(isinstance(x, bytes) for x in ot_drug_df[col]):
+            ot_drug_df[col] = ot_drug_df[col].apply(lambda x: eval(x.decode("utf-8")) if pd.notnull(x) and isinstance(x, bytes) else x)
+    return ot_drug_df
+
+def _get_open_targets_drugs(query:list, approved: bool) -> pd.DataFrame:
+    """
+    Retrieves drugs from Open Targets database that target the specified genes.
+
+    Args:
+        query (list): List of gene names to search for.
+        approved (bool): Value to filter drugs by (FDA-approved drugs = True).
+
+    Returns:
+        pd.DataFrame: Filtered dataframe containing drugs that target at least one gene from the query list.
+    """
+    # Load Open Targets files
+    drug_targets = _load_open_targets_drugs()
+    genes_to_ensembl = _load_open_targets_mapping()
+
+    # Convert genes to Ensembl ID
+    pd.options.mode.chained_assignment = None
+    ensemble_ids = genes_to_ensembl[genes_to_ensembl['Gene name'].isin(query)]
+    print(f"OpenTargets - {len(ensemble_ids['Gene name'].unique())}/{len(query)} genes found in Ensembl mapping.")
+
+    # Find drugs which target at least one gene
+    filtered_targets = drug_targets[drug_targets['linkedTargets.rows'].apply(lambda x: any(gene in ensemble_ids['Gene stable ID'].tolist() for gene in x))]
+
+    # Add columns for all target genes and overlapping target genes
+    filtered_targets['linkedTargets.genes'] = filtered_targets['linkedTargets.rows'].apply(lambda x: [genes_to_ensembl.loc[genes_to_ensembl['Gene stable ID'] == ensg, 'Gene name'].values[0] if ensg in genes_to_ensembl['Gene stable ID'].tolist() else ensg for ensg in x])
+    overlapping_genes_list = []
+    for genes_list in filtered_targets['linkedTargets.genes']:
+        genes_set = set(genes_list)
+        overlap = genes_set.intersection(set(query))
+        overlapping_genes_list.append(overlap)
+    filtered_targets['overlapping_genes'] = overlapping_genes_list
+
+    # Explode filtered_targets
+    filtered_targets['overlapping_genes'] = filtered_targets['overlapping_genes'].apply(list)
+    filtered_targets= filtered_targets.explode('overlapping_genes')
+
+    # Modify column values
+    filtered_targets['isApproved'] = filtered_targets['isApproved'].apply(lambda x: True if x == 1 else False)
+    filtered_targets['ApprovalRatings'] = [f"Max Phase {x}" for x in filtered_targets['maximumClinicalTrialPhase']]
+    filtered_targets = filtered_targets.drop('maximumClinicalTrialPhase', axis=1)
+
+    # Filter dataframe
+    filtered_targets = filtered_targets[filtered_targets['isApproved'] == approved]
+
+    pd.options.mode.chained_assignment = 'warn'
+
+    return filtered_targets
+
+def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgidb_min_citations:int = 1, approved:bool = True, savepath:Any = False) -> dict:
+    """
+    Retrieves drug-gene interactions based on the given query.
+
+    Parameters:
+    - query (list): List of genes for which drug-gene interactions are to be retrieved.
+    - drug_source (str): Source of drug-gene interaction data. Valid options are 'OpenTargets' and 'DGIdb'. Default is 'OpenTargets'.
+    - dgidb_min_citations (int): Minimum number of citations required for a drug-gene interaction to be considered. Default is 1.
+    - approved (bool): Whether to filter drugs by approval status. Default is True.
+    - savepath (Any): Path to save the drug-gene interaction data. If False, the data will not be saved. Default is False.
+
+    Returns:
+    - df (pandas.DataFrame): DataFrame containing the drug-gene interaction data.
+
+    Raises:
+    - ValueError: If the drug_source parameter is not 'OpenTargets' or 'DGIdb'.
+    """
+    # Set saving parameters
+    method_data = {}
+
+    # Check if drug source is valid
+    check = [x for x in drug_source if x not in ['OpenTargets', 'DGIdb']]
+    if len(check) > 0:
+        raise ValueError("Invalid drug source. Please define list with options: 'OpenTargets' or 'DGIdb'.")
+
+    # Get drug-gene interactions
+    if 'OpenTargets' in drug_source:
+        ot_drugs_df = _get_open_targets_drugs(query, approved)
+        print("OpenTargets - {}/{} genes with interacting drugs. {} unique drugs found with {} approval".format(len(ot_drugs_df.overlapping_genes.unique()), len(query), len(ot_drugs_df.name.unique()), approved))
+        method_data['OpenTargets'] = ot_drugs_df
+
+    if 'DGIdb' in drug_source:
+        dgi_db = _get_dgidb_data(query, dgidb_min_citations, approved)
+        print("DGIdb - {}/{} genes with interacting drugs. {} unique drugs found with {} approval".format(len(dgi_db.gene.unique()), len(query), len(dgi_db.drug.unique()), approved))
+        method_data['DGIdb'] = dgi_db
+
+    if savepath:
+        os.makedirs(savepath, exist_ok=True)
+        # Save files
+        for key, value in method_data.items():
+            value.to_csv(savepath + f'{key}_DrugGeneInteractions.csv', index = False)
+
+    return method_data
+
 #endregion
 

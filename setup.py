@@ -3,7 +3,7 @@ Setup script for pyCfS, a package for gene list validation experiments
 """
 import setuptools
 
-VERSION = '0.0.5'
+VERSION = '0.0.6'
 
 setuptools.setup(
     name = 'pyCfS',
@@ -14,9 +14,13 @@ setuptools.setup(
     description = "Gene list validation experiments",
     long_description = open('DESCRIPTION.rst').read(),
     packages = setuptools.find_packages(),
-    install_requires = ['requests', 'pandas', 'numpy', 'matplotlib', 'matplotlib_venn', 'Pillow',
-         'venn', 'scipy', 'networkx', 'biopython', 'upsetplot', 'markov_clustering', 'statsmodels', 'pyarrow',
-         'adjustText', 'seaborn'
+    install_requires = [
+        'requests', 'pandas', 'numpy',
+        'matplotlib', 'matplotlib_venn', 'Pillow',
+        'venn', 'scipy', 'networkx',
+        'biopython', 'upsetplot', 'markov_clustering',
+        'statsmodels', 'pyarrow', 'adjustText',
+        'seaborn'
     ],
     classifiers = [
         'Programming Language :: Python',
@@ -24,5 +28,13 @@ setuptools.setup(
         'Programming Language :: Python :: 3.8'
     ],
     include_package_data = True,
-    package_data = {'':['data/*.feather', 'data/*.txt', 'data/*.gmt', 'data/*.csv', 'data/mousePhenotypes/*.parquet', 'data/targets/*.parquet']}
+    package_data = {'':[
+        'data/*.feather',
+        'data/*.txt',
+        'data/*.gmt',
+        'data/*.csv',
+        'data/*.parquet',
+        'data/mousePhenotypes/*.parquet',
+        'data/targets/*.parquet'
+    ]}
 )
