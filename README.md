@@ -223,7 +223,7 @@ Yes
 
 ### `tissue_expression_enrichment()`
 ### `depmap_enrichment()`
-### `drug_targets()`
+### `drug_gene_interactions()`
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
