@@ -2,7 +2,17 @@
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments
 
 #### Installation
-pip install git+https://github.com/kevwilhelm95/pyCfS.git
+##### Install Git-LFS (in terminal)
+Mac (Homebrew) - `brew install git-lfs` <br>
+Windows - Follow instructions here: https://gitforwindows.org/ <br>
+Ubuntu/Debian - `sudo apt-get install git-lfs` <br>
+Fedora/CentOS - `sudo yum install git-lfs`<br>
+<br>
+Activate git-lfs - `git lfs install` <br>
+
+##### Install pyCfS (in anaconda environment)
+pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
+(Ensure pip is pointing to anaconda environment, if it is not, use anaconda environment pip: /path/to/env/../bin/pip install git+...) <br>
 
 #### Examples
 See "example.ipynb" for help
