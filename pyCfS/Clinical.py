@@ -18,84 +18,7 @@ import io
 import os
 import math
 import multiprocessing
-
-
-#region Common functions
-def _load_grch38_background(just_genes:bool = True) -> Any:
-    """Return list of background genes from GRCh38
-
-    Contains the following fields:
-        chrom           object
-        gene            str
-        start           int64
-        end             int64
-    Returns
-    -------
-        list: List of genes annotated in GRCh38_v94
-    """
-    stream = pkg_resources.resource_stream(__name__, 'data/ENSEMBL-lite_GRCh38.v94.txt')
-    df = pd.read_csv(stream, sep = '\t')
-    if just_genes:
-        return df['gene'].tolist()
-    else:
-        df.set_index('gene', inplace = True)
-        return df
-
-def _merge_random_counts(random_counts_iterations:list) -> dict:
-    """
-    Merge the counts from multiple iterations of random sampling.
-
-    Args:
-    random_counts_iterations (list): A list of dictionaries, where each dictionary contains the counts for a single iteration of random sampling.
-
-    Returns:
-    dict: A dictionary containing the merged counts from all iterations of random sampling.
-    """
-    merged_counts = {}
-    for i in random_counts_iterations:
-        for k, v in i.items():
-            if k in merged_counts:
-                merged_counts[k].append(v)
-            else:
-                merged_counts[k] = [v]
-    return merged_counts
-
-def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
-    """
-    Calculates the average and standard deviation of the values in a dictionary of random counts.
-
-    Args:
-    random_counts_merged (dict): A dictionary containing the merged random counts.
-
-    Returns:
-    A tuple containing two dictionaries: the first dictionary contains the average values for each key in the input dictionary,
-    and the second dictionary contains the standard deviation values for each key in the input dictionary.
-    """
-    avg_dict = {}
-    std_dict = {}
-    for k, v in random_counts_merged.items():
-        avg_dict[k] = np.mean(v)
-        std_dict[k] = np.std(v)
-    return avg_dict, std_dict
-
-def _load_open_targets_mapping() -> pd.DataFrame:
-    """
-    Load the open targets mapping data from a file and return it as a pandas DataFrame.
-
-    Returns:
-        pd.DataFrame: The mapping data with columns for ensgID and geneNames.
-    """
-    mapping_stream = pkg_resources.resource_stream(__name__, 'data/biomart_ensgID_geneNames_08162023.txt')
-    mapping_df = pd.read_csv(mapping_stream, sep='\t')
-    return mapping_df
-
-def _fix_savepath(savepath:str) -> str:
-    if savepath[-1] != "/":
-        savepath += "/"
-    return savepath
-#endregion
-
-
+from .utils import _load_grch38_background, _fix_savepath, _load_open_targets_mapping, _get_avg_and_std_random_counts, _merge_random_counts
 
 #region Mouse Phenotype
 def _get_gene_mapping(background_:str) -> (dict, dict):
@@ -747,7 +670,6 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
 
     return summary_df, strip_plot, fdr_plot
 #endregion
-
 
 
 #region Protein Family
