@@ -89,6 +89,10 @@ def _load_open_targets_mapping() -> pd.DataFrame:
     mapping_df = pd.read_csv(mapping_stream, sep='\t')
     return mapping_df
 
+def _fix_savepath(savepath:str) -> str:
+    if savepath[-1] != "/":
+        savepath += "/"
+    return savepath
 #endregion
 
 
@@ -732,12 +736,14 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
 
     # Output files
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        summary_df.to_csv(savepath + 'MGI_Lower-Level_PhenoEnrichment.csv')
-        strip_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment.png")
-        z_dist_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_ZscoreDist.png")
-        p_val_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_PvalDist.png")
-        fdr_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_FdrDist.png")
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'MGI_Mouse_Phenotypes/')
+        os.makedirs(new_savepath, exist_ok=True)
+        summary_df.to_csv(new_savepath + 'MGI_Lower-Level_PhenoEnrichment.csv')
+        strip_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment.png")
+        z_dist_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment_ZscoreDist.png")
+        p_val_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment_PvalDist.png")
+        fdr_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment_FdrDist.png")
 
     return summary_df, strip_plot, fdr_plot
 #endregion
@@ -1112,9 +1118,11 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
     # Generate plots
     plot = _protein_class_strip_plot(summary_df, plot_q_cut, plot_sig_dot_color, plot_fontsize, plot_fontface)
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        summary_df.to_csv(savepath + 'Open-Targets_ProteinClass-' + ",".join(level) + '_Enrichment.csv')
-        plot.save(savepath + "Open-Targets_ProteinClass-" + ",".join(level) + "_Enrichment.png")
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Protein_Family_Enrichment/')
+        os.makedirs(new_savepath, exist_ok=True)
+        summary_df.to_csv(new_savepath + 'Open-Targets_ProteinClass-' + ",".join(level) + '_Enrichment.csv')
+        plot.save(new_savepath + "Open-Targets_ProteinClass-" + ",".join(level) + "_Enrichment.png")
     return summary_df, plot
 
 #endregion
@@ -1312,6 +1320,7 @@ def depmap_enrichment(query:list, cancer_type:list, control_genes:list = [], plo
 
     # Save the files
     if savepath:
+        savepath = _fix_savepath(savepath)
         new_savepath = os.path.join(savepath, 'DepMap_Enrichment')
         os.makedirs(new_savepath, exist_ok=True)
         # Save p-value
@@ -1616,10 +1625,12 @@ def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgid
         method_data['DGIdb'] = dgi_db
 
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'DrugGeneInteractions/')
+        os.makedirs(new_savepath, exist_ok=True)
         # Save files
         for key, value in method_data.items():
-            value.to_csv(savepath + f'{key}_DrugGeneInteractions.csv', index = False)
+            value.to_csv(new_savepath + f'{key}_DrugGeneInteractions.csv', index = False)
 
     return method_data
 

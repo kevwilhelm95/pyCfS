@@ -262,6 +262,11 @@ def _format_scientific(value:float, threshold:float =9e-3) -> Any:
         return f"{value:.1e}"
     else:
         return str(value)
+
+def _fix_savepath(savepath:str) -> str:
+    if savepath[-1] != "/":
+        savepath += "/"
+    return savepath
 #endregion
 
 
@@ -292,7 +297,7 @@ def _get_overlap(list1:list, list2:list) -> (list, float):
 
     return overlap, pval
 
-def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list,pval:float, query_color:str, goldstandard_color:str, fontsize:int, fontface:str) -> Image:
+def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list, pval:float, show_genes_pval: bool, query_color:str, goldstandard_color:str, fontsize:int, fontface:str) -> Image:
     """
     Plots a Venn diagram representing the overlap between two sets and returns the plot as an image.
 
@@ -342,16 +347,19 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list,pval:fl
         if text == None:
             continue
         text.set_fontsize(fontsize)
-    plt.text(0, -0.7,
-            str("p = " + _format_scientific(pval)),
-            horizontalalignment='center',
-            verticalalignment='top',
-            fontsize=fontsize-2)
-    plt.text(0, -0.78,
-            ", ".join(overlap),
-            horizontalalignment='center',
-            verticalalignment='top',
-            fontsize=fontsize-2)
+    if show_genes_pval:
+        plt.text(0, -0.7,
+                str("p = " + _format_scientific(pval)),
+                horizontalalignment='center',
+                verticalalignment='top',
+                fontsize=fontsize-2)
+        plt.text(0, -0.78,
+                ", ".join(overlap),
+                horizontalalignment='center',
+                verticalalignment='top',
+                fontsize=fontsize-2)
+    plt.title("Gold Standard Overlap", fontsize=fontsize+4)
+    plt.tight_layout(pad = 2.0)
     buffer = io.BytesIO()
     plt.savefig(buffer, format = 'png', dpi = 300)
     buffer.seek(0)
@@ -361,7 +369,7 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list,pval:fl
 
     return image
 
-def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 'red', plot_goldstandard_color:str = 'gray', plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> (list, float, Image):
+def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 'red', plot_goldstandard_color:str = 'gray', plot_show_gene_pval:bool = True, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> (list, float, Image):
     """
     Analyzes the overlap between a query gene list and a gold standard gene list, plots a Venn diagram of the overlap,
     and optionally saves the plot and summary.
@@ -395,13 +403,15 @@ def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 
     # Get overlap
     overlapping_genes, pval = _get_overlap(query, goldstandard)
     # Plot Venn diagram
-    image = _plot_overlap_venn(len(query), len(goldstandard), overlapping_genes, pval, plot_query_color, plot_goldstandard_color, plot_fontsize, plot_fontface)
+    image = _plot_overlap_venn(len(query), len(goldstandard), overlapping_genes, pval, plot_show_gene_pval, plot_query_color, plot_goldstandard_color, plot_fontsize, plot_fontface)
     # Output files
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'GoldStandard_Overlap/')
+        os.makedirs(new_savepath, exist_ok=True)
         if image:
-            image.save(savepath + "GoldStandard_Overlap.png", bbox_inches = 'tight', pad_inches = 0.5)
-        with open(savepath + "GoldStandard_Overlap_Summary.txt", 'w') as f:
+            image.save(new_savepath + "GoldStandard_Overlap.png", bbox_inches = 'tight', pad_inches = 0.5)
+        with open(new_savepath + "GoldStandard_Overlap_Summary.txt", 'w') as f:
             f.write(f"Overlapping genes: {overlapping_genes}\n")
             f.write(f"P-value: {pval}")
 
@@ -411,6 +421,98 @@ def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 
 
 
 #region nDiffusion
+
+
+def nDiffusion():
+    network_fl = '../data/networks/toy_network.txt'
+    geneList1_fl = '../data/genes/A.tsv'
+    geneList2_fl = '../data/genes/B.tsv'
+    result_fl = '../results/'
+    group1_name = geneList1_fl.split('/')[-1].split('.')[0]
+    group2_name = geneList2_fl.split('/')[-1].split('.')[0]
+    repeat = 100 #number of randomization iterations
+
+    ### For a multimodal network, specify graph genes
+    graph_gene = []
+    if network_fl == '../data/networks/MeTeOR.txt':
+        for line in open(network_fl).readlines():
+            line = line.strip('\n').split('\t')
+            for i in line[:2]:
+                if ':' not in i:
+                    graph_gene.append(i)
+
+    if __name__ == "__main__":
+        ### Directory of the result folder
+        result_fl_figure = result_fl + 'figures/'
+        result_fl_raw = result_fl + 'raw_data/'
+        result_fl_ranking = result_fl + 'ranking/'
+        if not os.path.exists(result_fl):
+            os.makedirs(result_fl)
+        if not os.path.exists(result_fl_figure):
+            os.makedirs(result_fl_figure)
+        if not os.path.exists(result_fl_raw):
+            os.makedirs(result_fl_raw)   
+        if not os.path.exists(result_fl_ranking):
+            os.makedirs(result_fl_ranking)      
+        print('Running ...')
+
+        ### Getting network and diffusion parameters
+        G, graph_node, adjMatrix, node_degree, G_degree = getGraph(network_fl)
+        ps = getDiffusionParam(adjMatrix)
+        graph_node_index = getIndexdict(graph_node)
+        GP1_only_dict, GP2_only_dict, overlap_dict, other_dict = parseGeneInput(geneList1_fl, geneList2_fl, graph_node, graph_node_index, node_degree, graph_gene)
+        degree_nodes = getDegreeNode(G_degree, node_degree, other_dict['node'])
+
+        # Combine exclusive genes and overlapped genes in each group, if there is an overlap
+        if overlap_dict['node'] != []:
+            GP1_all_dict = combineGroup(GP1_only_dict, overlap_dict)
+            GP2_all_dict = combineGroup(GP2_only_dict, overlap_dict)
+            Exclusives_dict = combineGroup(GP1_only_dict, GP2_only_dict)
+    
+        ### Diffusion experiments
+        def getResults(gp1, gp2, result_fl, gp1_name, gp2_name, show = '', exclude=[]):
+            auroc, z_auc, auprc, z_prc, pval = runrun(gp1, gp2, result_fl, gp1_name, gp2_name, show, degree_nodes, other_dict['node'], graph_node_index, graph_node, ps, exclude=exclude, repeat = repeat)
+            return auroc, z_auc, auprc, z_prc, pval
+        
+        #### auroc, z-scores for auc, auprc, z-scores for auprc, KS pvals
+        #### z-scores: from_degree, to_degree, from_uniform, to_uniform
+
+        if overlap_dict['node'] != [] and GP1_only_dict['node'] != [] and GP2_only_dict['node'] != []: 
+            # From group 1 exclusive to group 2 all:
+            R_gp1o_gp2 = getResults(GP1_only_dict, GP2_all_dict, result_fl, group1_name+'Excl', group2_name, show = '__SHOW_1_')
+            # From group 2 exclusive to group 1 all:
+            R_gp2o_gp1 = getResults(GP2_only_dict, GP1_all_dict, result_fl, group2_name+'Excl', group1_name, show = '__SHOW_2_')     
+            # From group 1 exclusive to group 2 exclusive:
+            R_gp1o_gp2o = getResults(GP1_only_dict, GP2_only_dict, result_fl, group1_name+'Excl', group2_name+'Excl')
+            # From group 2 exclusive to group 1 exclusive:
+            R_gp2o_gp1o = getResults(GP2_only_dict, GP1_only_dict, result_fl, group2_name+'Excl', group1_name+'Excl')
+            # From group 1 exclusive to the overlap
+            R_gp1o_overlap = getResults(GP1_only_dict, overlap_dict, result_fl, group1_name+'Excl', 'Overlap')
+            # From group 2 exclusive to the overlap
+            R_gp2o_overlap = getResults(GP2_only_dict, overlap_dict, result_fl, group2_name+'Excl', 'Overlap')
+            # From overlap to (group 1 exclusive and group 2 exlusive)
+            R_overlap_exclusives = getResults(overlap_dict, Exclusives_dict, result_fl,'Overlap', 'Exclus')
+            ### Write output
+            writeSumTxt (result_fl, group1_name, group2_name, GP1_only_dict, GP2_only_dict, overlap_dict, R_gp1o_gp2, R_gp2o_gp1, R_gp1o_gp2o, R_gp2o_gp1o, R_gp1o_overlap, R_gp2o_overlap, R_overlap_exclusives)
+        elif overlap_dict['node'] != [] and GP2_only_dict['node'] == []: #when group 2 is entirely part of group 1
+            # From group 1 exclusive to overlap/group 2
+            R_gp1o_overlap = getResults(GP1_only_dict, overlap_dict, result_fl, group1_name+'Excl', 'Overlap or'+group2_name)
+            # From overlap/group 2 to group 1 exclusive
+            R_overlap_gp1o = getResults(overlap_dict, GP1_only_dict, result_fl,'Overlap or'+group2_name, group1_name+'Excl')
+            writeSumTxt (result_fl, group1_name, group2_name, GP1_only_dict, GP2_only_dict, overlap_dict, R_gp1o_overlap=R_gp1o_overlap, R_overlap_gp1o=R_overlap_gp1o)
+        elif overlap_dict['node'] != [] and GP1_only_dict['node'] == []: #when group 1 is entirely part of group 2
+            # From group 2 exclusive to overlap/group 1
+            R_gp2o_overlap = getResults(GP2_only_dict, overlap_dict, result_fl, group2_name+'Excl', 'Overlap or '+group1_name)
+            # From overlap/group 1 to group 2 exclusive
+            R_overlap_gp2o = getResults(overlap_dict, GP2_only_dict, result_fl,'Overlap or'+group1_name, group2_name+'Excl')
+            writeSumTxt (result_fl, group1_name, group2_name, GP1_only_dict, GP2_only_dict, overlap_dict, R_gp2o_overlap=R_gp2o_overlap, R_overlap_gp2o=R_overlap_gp2o)
+        else: #when there is no overlap between two groups
+            # From group 1 to group 2:
+            R_gp1o_gp2o = getResults(GP1_only_dict, GP2_only_dict, result_fl, group1_name, group2_name, show = 'SHOW1')
+            # From group 2 to group 1:
+            R_gp2o_gp1o = getResults(GP2_only_dict, GP1_only_dict, result_fl, group2_name, group1_name, show = 'SHOW2')
+            ### Write output
+            writeSumTxt (result_fl, group1_name, group2_name, GP1_only_dict, GP2_only_dict, overlap_dict, R_gp1o_gp2o=R_gp1o_gp2o, R_gp2o_gp1o=R_gp2o_gp1o)
 #endregion
 
 
@@ -1031,14 +1133,16 @@ def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = No
     unique_gene_network = _output_unique_gene_network(query_unique_gene_network, query_unique_genes)
 
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        enrich_image.save(savepath + "Interconnectivity_Norm_Plot.png", format = "PNG")
-        venn_image.save(savepath + "Interconnectivity_Venn.png", format = "PNG")
-        pd.DataFrame({'col': random_sets_connections}).to_csv(savepath + "RandomSetConnections.csv", header = False, index = False)
-        unique_gene_network.to_csv(savepath + "UniqueGeneNetwork.csv", header = True, index = False)
-        pd.DataFrame.from_dict(query_gene_sources, orient='index').to_csv(savepath + "GeneSet_Sources.csv", header = False)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'GoldStandard_Interconnectivity/')
+        os.makedirs(new_savepath, exist_ok=True)
+        enrich_image.save(new_savepath + "Interconnectivity_Norm_Plot.png", format = "PNG")
+        venn_image.save(new_savepath + "Interconnectivity_Venn.png", format = "PNG")
+        pd.DataFrame({'col': random_sets_connections}).to_csv(new_savepath + "RandomSetConnections.csv", header = False, index = False)
+        unique_gene_network.to_csv(new_savepath + "UniqueGeneNetwork.csv", header = True, index = False)
+        pd.DataFrame.from_dict(query_gene_sources, orient='index').to_csv(new_savepath + "GeneSet_Sources.csv", header = False)
         # Write stats
-        with open(savepath + "EnrichmentStats.txt", "w") as f:
+        with open(new_savepath + "EnrichmentStats.txt", "w") as f:
             f.write('Number of b/w set connects in real gene sets:'+ str(len(true_connections)) + '\n')
             f.write('Z-score based on curve fit:' + str(z_fit))
         f.close()
@@ -1458,11 +1562,13 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     tp, fp, fn, tn, pval = _calculate_fishers_exact(query_snp_dict, bg_gene_dict, final_genes)
     # Output values
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'GWAS_Colocalization/')
+        os.makedirs(new_savepath, exist_ok=True)
         if save_summary_statistics:
-            gwas_catalog.to_csv(savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}.csv", index = True)
-        query_snp_df.to_csv(savepath +f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_TP.csv", index = False)
-        with open(savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_Summary.txt", "w") as f:
+            gwas_catalog.to_csv(new_savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}.csv", index = True)
+        query_snp_df.to_csv(new_savepath +f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_TP.csv", index = False)
+        with open(new_savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_Summary.txt", "w") as f:
             f.write(f"TP = {tp}\n")
             f.write(f"FP = {fp}\n")
             f.write(f"FN = {fn}\n")
@@ -1779,13 +1885,15 @@ def pubmed_comentions(query:list, keyword: str, background_genes: list = [], fie
         enrich_results, enrich_images = {}, {}
 
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        query_comention_df.to_csv(savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
-        rand_result_df.to_csv(savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, f'PubMed_Comentions/{keyword}/')
+        os.makedirs(new_savepath, exist_ok=True)
+        query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
+        rand_result_df.to_csv(new_savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
         for key, value in enrich_images.items():
-            value.save(savepath + f"PubMedQueryPlot_keyword-{keyword}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
+            value.save(new_savepath + f"PubMedQueryPlot_keyword-{keyword}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
         # Write results to file
-        with open(savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
+        with open(new_savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
             for key,value in enrich_results.items():
                 f.write(f">{key[0] + 1} & <={key[1]} Comentions = {value[0]} (Z = {value[1]})\n")
             f.close()

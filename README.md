@@ -113,6 +113,7 @@ Assess the overlap with a reference gene set.
 - **Optional**:
     - `plot_query_color` (str): Color of query venn diagram (Default = red).
     - `plot_goldstandard_color` (str): Color of goldstandard venn diagram (Default = gray)
+    - `plot_show_gene_pval` (bool) : Default = True. Toggle showing the overlapping gene names and p-value on plot image
     - `plot_fontsize` (int): Fontsize for venn diagram (Default = 14).
     - `plot_fontface` (str): Fontface for venn diagram (Default = Avenir).
     - `savepath` (str): File path. If not provided, no files saved.

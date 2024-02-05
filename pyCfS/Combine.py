@@ -156,6 +156,11 @@ def _get_edge_weight(edge_confidence:str) -> float:
     else:
         weight = 0.4
     return weight
+
+def _fix_savepath(savepath:str) -> str:
+    if savepath[-1] != "/":
+        savepath += "/"
+    return savepath
 #endregion
 
 
@@ -302,9 +307,11 @@ def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False,
     df = df.sort_values(by='occurrences', ascending=False)
     # Save and output
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        df.to_csv(savepath + "ConsensusGenes.csv", index=False)
-        upset_plot.save(savepath + "UpsetPlot.png", bbox_inches='tight', pad_inches=0.5)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Consensus/')
+        os.makedirs(new_savepath, exist_ok=True)
+        df.to_csv(new_savepath + "ConsensusGenes.csv", index=False)
+        upset_plot.save(new_savepath + "UpsetPlot.png", bbox_inches='tight', pad_inches=0.5)
     return df, upset_plot
 #endregion
 
@@ -1175,17 +1182,19 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         pval_merged_tuple_set
     )
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Functional_Clustering/')
+        os.makedirs(new_savepath, exist_ok=True)
         # Save true gene network
-        true_gene_network.to_csv(savepath + 'GeneSetNetwork.csv', index = False)
+        true_gene_network.to_csv(new_savepath + 'GeneSetNetwork.csv', index = False)
         # save true_cluster_dict
-        true_cluster_df.to_csv(savepath + 'TrueClusters.csv', index = False)
+        true_cluster_df.to_csv(new_savepath + 'TrueClusters.csv', index = False)
         # save random_sets
-        with open(savepath + 'RandomSets_Clusters.txt', 'w') as f:
+        with open(new_savepath + 'RandomSets_Clusters.txt', 'w') as f:
             for item in random_sets_clusters:
                 f.write("%s\n" % item)
         # Save cluster enrichment dataframes - true_clusters_enrichment_df_dict
-        enrich_save_path = savepath + 'Enrichment/'
+        enrich_save_path = new_savepath + 'Enrichment/'
         if not os.path.exists(enrich_save_path):
             os.makedirs(enrich_save_path)
         for cluster_num, sub_dict in true_clusters_enrichment_df_dict.items():
@@ -1535,8 +1544,10 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     # Calcualte control - p-value multiplication
     df = _p_multiply(df)
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        df.to_csv(savepath + "StatisticalCombination.csv", index = False)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Statistical_Consensus/')
+        os.makedirs(new_savepath, exist_ok=True)
+        df.to_csv(new_savepath + "StatisticalCombination.csv", index = False)
 
     return df
 #endregion
