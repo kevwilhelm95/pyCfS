@@ -34,6 +34,7 @@ Parallelized functions require the user to run function under blocking guard (i.
     - `mouse_phenotype_enrichment`
     - `protein_family_enrichment`
     - `drug_gene_interactions`
+    - `depmap_enrichment`
 
 # Modules
 
@@ -105,6 +106,7 @@ No
 
 ## pyCFS.GoldStandards
 ### `goldstandard_overlap()`
+Assess the overlap with a reference gene set.
 #### Parameters:
 - `query` (list): List of query genes
 - `goldstandard` (list): List of gold standard genes
@@ -124,6 +126,7 @@ No
 ### `ndiffusion()`
 
 ### `interconnectivity()`
+Assess the level of direct connections with reference gene set in the STRING network.
 #### Parameters:
 - `set_1` (list): List of genes.
 - `set_2` (list): List of genes. 
@@ -150,6 +153,7 @@ No
 Yes
 
 ### `gwas_catalog_colocalization()`
+Assess the enrichment for co-localization within X Mbp of genome-wide significant loci.
 #### Parameters:
 - `query` (list): List of genes:
 - **Optional**:
@@ -167,6 +171,7 @@ Yes
 Yes
 
 ### `pubmed_comentions()`
+Assess the enrichment for co-mentions with specific keywords in PubMed.
 #### Parameters:
 - `query` (list): List of genes.
 - `keyword` (str): Keyword to search co-mentions for.
@@ -194,6 +199,7 @@ Yes
 
 ## pyCFS.Clinical
 ### `mouse_phenotype_enrichment()`
+Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data parsed and downloaded from OpenTargets).
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
@@ -213,6 +219,7 @@ Yes
 Yes
 
 ### `protein_family_enrichment()`
+Assess enrichment of protein family type from OpenTargets data.
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
@@ -232,8 +239,27 @@ Yes
 Yes
 
 ### `tissue_expression_enrichment()`
+
 ### `depmap_enrichment()`
+Assess enrichment for cancer-dependent genes.
+#### Parameters:
+- `query` (list) : List of genes
+- `cancer_type` (list) : List of cancer cell types (Available cancer cell types can be found at - https://depmap.org/portal/ > Tools > Cell Line Selector > Create custom list (Broad types = Lineage, Most specific = Lineage Sub-subtype))
+- **Optional**:
+    - `control_genes` (list) : List of genes to compare against. If not defined, default comparison is all DepMap tested genes less query genes.
+    - `plot_fontface` (str) : Defualt = Avenir.
+    - `plot_fontsize` (int) : Default = 14.
+    - `plot_query_color` (str) : Default = red.
+    - `plot_background_color` (str) : Default = gray.
+    - `savepath` (str) : File path
+#### Returns
+- `float` : P-value of Mann Whitney U test
+- `Image` : Histogram of Chronos DepMap scores for query and background genes
+#### Parallelized
+No
+
 ### `drug_gene_interactions()`
+Pulls drug-gene interactions in order to find potential repurposable therapies.
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
@@ -243,3 +269,5 @@ Yes
     - `savepath` (str) : File path
 #### Returns:
  - `dict` : Resource name and drug interactors (e.g. {'DGIdb': pd.DataFrame})
+#### Parallelized
+No
