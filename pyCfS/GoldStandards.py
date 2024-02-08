@@ -24,10 +24,10 @@ import networkx as nx
 from Bio import Entrez
 import concurrent.futures
 from itertools import repeat
-from .utils import _hypergeo_overlap, _format_scientific, _fix_savepath, _clean_genelists, _load_grch38_background, _load_string, _get_evidence_types, _get_combined_score, _get_edge_weight, _select_evidences
+from .utils import _hypergeo_overlap, _format_scientific, _fix_savepath, _define_background_list, _clean_genelists, _load_grch38_background, _load_string, _get_evidence_types, _get_combined_score, _get_edge_weight, _select_evidences
 
 #region Gold Standard Overlap
-def _get_overlap(list1:list, list2:list) -> (list, float):
+def _get_overlap(list1:list, list2:list, background_list:list) -> (list, float):
     """
     Calculates the overlap between two lists and computes the p-value for the overlap.
 
@@ -48,7 +48,11 @@ def _get_overlap(list1:list, list2:list) -> (list, float):
     """
     # Get overlap and calculate p-val
     overlap = [x for x in list1 if x in list2]
-    pval = _hypergeo_overlap(background_size = len(_load_grch38_background()), query_genes = len(list1), gs_genes = len(list2), overlap = len(overlap))
+    if background_list:
+        background = background_list
+    else:
+        background = _load_grch38_background()
+    pval = _hypergeo_overlap(background_size = len(background), query_genes = len(list1), gs_genes = len(list2), overlap = len(overlap))
 
     return overlap, pval
 
@@ -124,7 +128,7 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list, pval:f
 
     return image
 
-def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 'red', plot_goldstandard_color:str = 'gray', plot_show_gene_pval:bool = True, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> (list, float, Image):
+def goldstandard_overlap(query: list, goldstandard:list, custom_background:Any = 'ensembl', plot_query_color:str = 'red', plot_goldstandard_color:str = 'gray', plot_show_gene_pval:bool = True, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> (list, float, Image):
     """
     Analyzes the overlap between a query gene list and a gold standard gene list, plots a Venn diagram of the overlap,
     and optionally saves the plot and summary.
@@ -156,7 +160,9 @@ def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 
     cleaned = _clean_genelists([query, goldstandard])
     query, goldstandard = cleaned[0], cleaned[1]
     # Get overlap
-    overlapping_genes, pval = _get_overlap(query, goldstandard)
+    background_dict, background_name = _define_background_list(custom_background)
+    background_list = background_dict[background_name]
+    overlapping_genes, pval = _get_overlap(query, goldstandard, background_list)
     # Plot Venn diagram
     image = _plot_overlap_venn(len(query), len(goldstandard), overlapping_genes, pval, plot_show_gene_pval, plot_query_color, plot_goldstandard_color, plot_fontsize, plot_fontface)
     # Output files
@@ -176,8 +182,6 @@ def goldstandard_overlap(query: list, goldstandard:list, plot_query_color:str = 
 
 
 #region nDiffusion
-
-
 def nDiffusion():
     network_fl = '../data/networks/toy_network.txt'
     geneList1_fl = '../data/genes/A.tsv'
@@ -546,7 +550,7 @@ def _get_node_degree_dict(unique_genes:list, degree_df:pd.DataFrame) -> pd.DataF
     df = df.loc[unique_genes]
     return df
 
-def _create_random_degree_matched_set(unique_gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, seed:int) -> dict:
+def _create_random_degree_matched_set(unique_gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, seed:int) -> dict:
     """
     Generates random sets of genes matched by degree distribution to given gene sets.
 
@@ -573,27 +577,42 @@ def _create_random_degree_matched_set(unique_gene_sets:dict, string_net_all_gene
     random_sets = {}
     seed = seed *2
     rng = np.random.default_rng(seed)
+
+    # Get full degree dataframe filtered
+    degree_df = string_net_degree_df.copy()
+    print("degree_df", degree_df.shape)
+    degree_df = degree_df[degree_df.index.isin(background_genes)]
+    print("background_degree_df", degree_df.shape)
+
+    # Loop through unique gene sets
     for k, v in unique_gene_sets.items():
         unique_mapped_genes = v
         # need to filter for genes that are mapped to STRING appropriately
         unique_mapped_genes = [
-            x for x in unique_mapped_genes if x in string_net_all_genes]
+            x for x in unique_mapped_genes if x in string_net_all_genes
+        ]
         unique_mapped_genes_degree_df = _get_node_degree_dict(
-            unique_mapped_genes, string_net_degree_df)
+            unique_mapped_genes, string_net_degree_df
+        )
         unique_mapped_genes_degree_df = pd.DataFrame(
-            unique_mapped_genes_degree_df.groupby('degree_rounded')['degree'].count())
+            unique_mapped_genes_degree_df.groupby('degree_rounded')['degree'].count()
+        )
         #in this dictionary: key is degree, value is count of genes with that degree
-        unique_mapped_genes_degree_dict = dict(zip(unique_mapped_genes_degree_df.index.tolist(
-        ), unique_mapped_genes_degree_df['degree'].tolist()))
+        unique_mapped_genes_degree_dict = dict(
+            zip(
+                unique_mapped_genes_degree_df.index.tolist(),
+                unique_mapped_genes_degree_df['degree'].tolist()
+            )
+        )
 
         random_genes = []
+        # Loop through degree, # of genes and get random genes with the same degree
         for k1, v1 in unique_mapped_genes_degree_dict.items():
-            degree_df = string_net_degree_df.copy()
-            degree_df = degree_df[degree_df['degree_rounded'] == k1]
-
-            degree_matched_genes = degree_df.index.tolist()
-            x = rng.choice(degree_matched_genes, v1, replace = False).tolist()
-            random_genes.extend(x)
+            degree_df_matched = degree_df[degree_df['degree_rounded'] == k1]
+            degree_matched_genes = degree_df_matched.index.tolist()
+            # Select v1 number of random genes from degree_matched_genes
+            random_degree_matched_genes = rng.choice(degree_matched_genes, v1, replace = False).tolist()
+            random_genes.extend(random_degree_matched_genes)
         random_sets[k] = random_genes
     return random_sets
 
@@ -739,7 +758,7 @@ def _gene_set_overlap(gene_sets:dict) -> Image:
 
     return image
 
-def _process_random_set(iteration:int, unique_gene_sets:dict, string_net_all_genes:pd.DataFrame, string_net_degree_df:pd.DataFrame, string_net:pd.DataFrame) -> Any:
+def _process_random_set(iteration:int, unique_gene_sets:dict, background_genes:list, string_net_all_genes:pd.DataFrame, string_net_degree_df:pd.DataFrame, string_net:pd.DataFrame) -> Any:
     """
     Processes a single iteration for creating and analyzing a random degree-matched gene set.
 
@@ -762,7 +781,7 @@ def _process_random_set(iteration:int, unique_gene_sets:dict, string_net_all_gen
         and analysis. It handles exceptions internally and prints error messages without halting execution.
     """
     try:
-        random_sets = _create_random_degree_matched_set(unique_gene_sets, string_net_all_genes, string_net_degree_df, iteration)
+        random_sets = _create_random_degree_matched_set(unique_gene_sets, background_genes, string_net_all_genes, string_net_degree_df, iteration)
         random_gene_sources = _get_gene_sources(random_sets)
         random_unique_genes = _get_unique_genes(random_gene_sources)
         random_unique_gene_network = _get_unique_gene_network(list(random_unique_genes.keys()), string_net)
@@ -772,7 +791,7 @@ def _process_random_set(iteration:int, unique_gene_sets:dict, string_net_all_gen
         print(f"An error occurred during processing: {e}")
         return None
 
-def _parallel_random_enrichment(unique_gene_sets:dict, string_net_all_genes:pd.DataFrame, string_net_degree_df:pd.DataFrame, string_net:pd.DataFrame, num_iterations:int, num_processes:int) -> list:
+def _parallel_random_enrichment(unique_gene_sets:dict, background_genes:list, string_net_all_genes:pd.DataFrame, string_net_degree_df:pd.DataFrame, string_net:pd.DataFrame, num_iterations:int, num_processes:int) -> list:
     """
     Executes random enrichment analysis in parallel over multiple iterations.
 
@@ -794,14 +813,14 @@ def _parallel_random_enrichment(unique_gene_sets:dict, string_net_all_genes:pd.D
         It is crucial to use this function within a 'if __name__ == "__main__":' block for safe parallel execution, especially
         on Windows. The number of processes (`num_processes`) should be chosen based on the system's capabilities.
     """
-    args = [(i, unique_gene_sets, string_net_all_genes, string_net_degree_df, string_net) for i in range(num_iterations)]
+    args = [(i, unique_gene_sets, background_genes, string_net_all_genes, string_net_degree_df, string_net) for i in range(num_iterations)]
 
     with Pool(num_processes) as pool:
         random_sets_connections = pool.starmap(_process_random_set, args)
 
     return random_sets_connections
 
-def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict):
+def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, custom_background:Any = 'string', savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict):
     """
     Analyzes gene set interconnectivity and visualizes the results, returning multiple outputs
     including images, lists, and data structures.
@@ -871,13 +890,19 @@ def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = No
     query_gene_sources = _get_gene_sources(gene_sets)
     query_unique_genes = _get_unique_genes(query_gene_sources)
     query_unique_gene_network = _get_unique_gene_network(
-        list(query_unique_genes.keys()), string_net)
+        list(query_unique_genes.keys()), string_net
+    )
     true_connections = _get_unique_gene_network_bw_method_connections(query_unique_gene_network, query_unique_genes)
     # random gene sets b/w set unique gene connectivity w/ degree matching
+    if custom_background == 'string':
+        background_genes = string_net_all_genes
+    else:
+        background_dict, background_name = _define_background_list(custom_background)
+        background_genes = background_dict[background_name]
     # dictionary with unique genes (values) per each set (keys) in true gene lists
     unique_gene_sets = _get_unique_gene_counts(query_unique_genes)
     # Perform random enrichment-parallelized
-    random_sets_connections = _parallel_random_enrichment(unique_gene_sets, string_net_all_genes, string_net_degree_df, string_net, num_iterations, cores)
+    random_sets_connections = _parallel_random_enrichment(unique_gene_sets, background_genes, string_net_all_genes, string_net_degree_df, string_net, num_iterations, cores)
     # Generate z score
     mu, sigma = norm.fit(random_sets_connections)
     z_fit = (len(true_connections) - mu)/sigma
@@ -995,87 +1020,6 @@ def _pull_gwas_catalog(mondo_id:str, p_upper:float) -> pd.DataFrame:
         print(f"Status code exited with error: {response.status_code}")
         raise ValueError(f"Cannot download summary statistics for {mondo_id}, please download and add the path to the table.")
 
-def _get_gene_loci(g:str, geneloci:pd.DataFrame) -> (int, int, int):
-    """
-    Retrieves the chromosome location (chromosome number, start position, and end position) for a specified gene.
-
-    This function looks up a given gene in a DataFrame containing gene loci information and returns the chromosome number,
-    start position, and end position of the gene.
-
-    Args:
-        g (str): The gene symbol for which loci information is to be retrieved.
-        geneloci (pd.DataFrame): A pandas DataFrame containing gene loci information.
-                                 This DataFrame must have columns 'chrom', 'start', and 'end'.
-    Returns:
-        tuple:
-            - int: The chromosome number on which the gene is located.
-            - int: The start position of the gene on the chromosome.
-            - int: The end position of the gene on the chromosome.
-    Raises:
-        KeyError: If the specified gene is not found in the DataFrame.
-        ValueError: If the start or end positions cannot be converted to integers.
-
-    Note:
-        The function assumes that the 'chrom' column in the DataFrame contains chromosome numbers as integers.
-    """
-    row = geneloci.loc[g].values
-    g_chr, g_start, g_end = row[0], row[1], row[2]
-    return g_chr, int(g_start), int(g_end)
-
-def _get_snp_loci(snp:str, gwasloci:pd.DataFrame) -> (int, int):
-    """
-    Retrieves the chromosome location (chromosome number and position) for a specified SNP (Single Nucleotide Polymorphism).
-
-    This function looks up a given SNP in a DataFrame containing GWAS (Genome-Wide Association Studies) loci information
-    and returns the chromosome number and position of the SNP.
-
-    Args:
-        snp (str): The SNP identifier for which loci information is to be retrieved.
-        gwasloci (pd.DataFrame): A pandas DataFrame containing GWAS loci information.
-                                 This DataFrame must have columns 'CHR_ID' and 'CHR_POS'.
-
-    Returns:
-        tuple:
-            - int: The chromosome number on which the SNP is located, or None if not found/convertible.
-            - int: The position of the SNP on the chromosome, or None if not found/convertible.
-
-    Raises:
-        KeyError: If the specified SNP is not found in the DataFrame.
-
-    Note:
-        The function attempts to convert the chromosome position to an integer. If this conversion fails,
-        it returns None for both chromosome number and position. The function assumes that 'CHR_ID' column
-        in the DataFrame contains chromosome numbers and 'CHR_POS' contains position numbers.
-    """
-    s_chr = gwasloci.loc[snp]['CHR_ID']
-    s_pos = gwasloci.loc[snp]['CHR_POS']
-    try:
-        return s_chr, int(s_pos)
-    except ValueError:
-        return None, None
-
-def _get_snp_distance(snp:int, g_loc:int) -> int:
-    """
-    Calculates the absolute distance between a SNP position and a gene location.
-
-    This function computes the absolute difference between the position of a Single Nucleotide
-    Polymorphism (SNP) and a gene location on a chromosome. This is useful for understanding
-    the physical distance between a SNP and a gene, which can be relevant in genetic studies.
-
-    Args:
-        snp (int): The position of the SNP on the chromosome.
-        g_loc (int): The position of the gene on the chromosome.
-
-    Returns:
-        int: The absolute distance between the SNP and the gene location.
-
-    Note:
-        Both the SNP position and gene location should be provided as integer values representing
-        their respective positions on a chromosome. The function uses numpy's absolute value function
-        to ensure the distance is returned as a positive integer.
-    """
-    return int(np.abs(snp - g_loc))
-
 def _find_snps_within_range(query_genes:list, ref_gene_index:list, geneloci:pd.DataFrame, gwasloci:pd.DataFrame, query_distance:int) -> dict:
     """
     Identifies Single Nucleotide Polymorphisms (SNPs) within a specified distance from given query genes.
@@ -1118,27 +1062,6 @@ def _find_snps_within_range(query_genes:list, ref_gene_index:list, geneloci:pd.D
         gene_dict[gene] = snps_within_range
 
     return gene_dict
-
-def _count_genes_with_snps(gene_snp_dict:dict) -> int:
-    """
-    Counts the number of genes that have associated SNPs within a given distance.
-
-    This function takes a dictionary mapping genes to SNPs and returns the count of genes that have one or more SNPs associated with them.
-    It is specifically designed to work with the output of a function that maps genes to nearby SNPs.
-
-    Args:
-        gene_snp_dict (dict): A dictionary where keys are gene symbols and values are lists of SNPs.
-                              Each SNP is associated with the gene as a nearby genetic variant.
-
-    Returns:
-        int: The number of genes that have at least one SNP associated with them.
-
-    Note:
-        The function does not count the total number of SNPs but rather counts the number of genes that have SNPs.
-        A gene with multiple SNPs is counted as one.
-    """
-    count = sum(1 for snps in gene_snp_dict.values() if snps)
-    return count
 
 def _get_genes_with_snps(gene_snp_dict:dict) -> list:
     """
@@ -1263,7 +1186,7 @@ def _calculate_fishers_exact(gene_snp_dict:dict, all_gene_dict:dict, final_genes
     _, pval = fisher_exact(np.array([[tp, fp], [fn, tn]]), alternative='greater')
     return tp, fp, fn, tn, pval
 
-def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_path:str = False, gwas_p_thresh: float = 5e-8, distance_mbp:float = 0.5, cores:int = 1, savepath:Any = False, save_summary_statistics:bool = False) -> (pd.DataFrame, float):
+def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_path:str = False, gwas_p_thresh: float = 5e-8, distance_mbp:float = 0.5, custom_background:list = [], cores:int = 1, savepath:Any = False, save_summary_statistics:bool = False) -> (pd.DataFrame, float):
     """
     Performs colocalization analysis between a list of query genes and GWAS catalog SNPs.
 
@@ -1310,7 +1233,13 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     final_genes = _get_genes_with_snps(query_snp_dict)
     # Run colocalization for background
     print("Running background genes")
-    bg_chunks = _chunk_data(gene_locations.index.tolist(), cores)
+    background_dict, background_name = _define_background_list(custom_background)
+    background_genes = background_dict[background_name]
+    clean = [x for x in background_genes if x in gene_locations.index]
+    print(f"Background genes mapped: {len(clean)}/{len(background_genes)}")
+    bg_new = gene_locations[gene_locations.index.isin(clean)]
+    # Chunk the background genes for faster parsing
+    bg_chunks = _chunk_data(bg_new.index.tolist(), cores)
     bg_gene_dicts = _run_parallel_query(_find_snps_within_range, bg_chunks, gwas_catalog.index, gene_locations, gwas_catalog[['CHR_ID', 'CHR_POS', 'MAPPED_GENE']].drop_duplicates(), distance_bp, cores)
     bg_gene_dict = _combine_dicts(bg_gene_dicts)
     # Test significance
@@ -1591,7 +1520,7 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
 
     return image
 
-def pubmed_comentions(query:list, keyword: str, background_genes: list = [], field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict):
+def pubmed_comentions(query:list, keyword: str, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict):
     """
     Searches PubMed for comention of genes within articles related to a given field and
     performs a randomization test to compute Z-scores for observed mention counts.
@@ -1621,6 +1550,8 @@ def pubmed_comentions(query:list, keyword: str, background_genes: list = [], fie
 
     # Pull co_mentions for a random set of genes
     if run_enrichment:
+        background_dict, background_name = _define_background_list(custom_background)
+        background_genes = background_dict[background_name]
         rand_dfs = _fetch_random_pubmed(query, keyword, email, api_key, workers, field, enrichment_trials, background_genes)
         enrich_results, enrich_images = {}, {}
         rand_result_df = pd.DataFrame({'Iteration': range(0, len(rand_dfs))})
@@ -1653,4 +1584,3 @@ def pubmed_comentions(query:list, keyword: str, background_genes: list = [], fie
             f.close()
     return query_comention_df, enrich_results, enrich_images
 #endregion
-

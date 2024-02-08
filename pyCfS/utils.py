@@ -87,9 +87,87 @@ def _load_string() -> pd.DataFrame:
     """
     stream = pkg_resources.resource_stream(__name__, 'data/STRINGv11_ProteinNames_DetailedEdges_07062022.feather')
     return pd.read_feather(stream)
+
+def _load_open_targets_mapping() -> pd.DataFrame:
+    """
+    Load the open targets mapping data from a file and return it as a pandas DataFrame.
+
+    Returns:
+        pd.DataFrame: The mapping data with columns for ensgID and geneNames.
+    """
+    mapping_stream = pkg_resources.resource_stream(__name__, 'data/biomart_ensgID_geneNames_08162023.txt')
+    mapping_df = pd.read_csv(mapping_stream, sep='\t')
+    return mapping_df
+
+def _load_reactome() -> list:
+    """
+    Load the Reactome pathways from the provided GMT file.
+
+    Returns:
+        list: A DataFrame containing the Reactome pathways.
+    """
+    reactomes_stream = pkg_resources.resource_stream(__name__, 'data/ReactomePathways_Mar2023.gmt')
+    reactomes = reactomes_stream.readlines()
+    reactomes = [x.decode('utf-8').strip('\n') for x in reactomes]
+    reactomes = [x.split('\t') for x in reactomes]
+    for x in reactomes:
+        x.pop(1)
+    return reactomes
+
+def _get_open_targets_gene_mapping() -> dict:
+    """
+    Returns a tuple containing two dictionaries:
+    1. A dictionary mapping Ensembl gene IDs to gene names
+
+    Returns:
+    -------
+    tuple:
+        A tuple containing two dictionaries:
+        1. A dictionary mapping Ensembl gene IDs to gene names
+    """
+    mapping_df = _load_open_targets_mapping()
+    mapping_dict = dict(zip(mapping_df['Gene stable ID'].tolist(), mapping_df['Gene name'].tolist()))
+    return mapping_dict
 #endregion
 
 #region General cleaning and formatting
+def _define_background_list(background_:Any, just_genes: bool = True) -> (dict, str):
+    """
+    Defines the background list based on the input background parameter.
+
+    Parameters:
+    background_ (Any): The background parameter. It can be either 'reactome', 'ensembl', or a list of genes.
+    just_genes (bool): A boolean flag indicating whether to include only genes in the background list. Default is True.
+
+    Returns:
+    tuple: A tuple containing the background dictionary and the background name.
+
+    Raises:
+    ValueError: If the background parameter is not 'reactome', 'ensembl', or a list of genes.
+
+    """
+    background_name = background_
+    if isinstance(background_, str):
+        if background_ not in ['reactome', 'ensembl']:
+            raise ValueError("Background must be either 'reactome' or 'ensembl' or list of genes")
+        elif background_ == 'reactome':
+            reactomes_bkgd = _load_reactome()
+            reactomes_genes = [x[1:] for x in reactomes_bkgd]
+            reactomes_genes = [item for sublist in reactomes_genes for item in sublist]
+            reactomes_bkgd = list(set(reactomes_genes))
+            reactomes_bkgd = [gene for gene in reactomes_bkgd if gene.isupper()]
+            background_dict = {'reactome':reactomes_bkgd}
+        elif background_ == 'ensembl':
+            ensembl_bkgd = _load_grch38_background(just_genes)
+            background_dict = {'ensembl':ensembl_bkgd}
+    # Custom background
+    elif isinstance(background_, list):
+        print(f"Custom background: {len(background_)} genes")
+        background_dict = {'custom':background_}
+        background_name = 'custom'
+
+    return background_dict, background_name
+
 def _clean_genelists(lists: Iterable) -> list:
     """
     Normalize gene lists by ensuring all are lists and non-None.
@@ -148,6 +226,43 @@ def _fix_savepath(savepath:str) -> str:
     if savepath[-1] != "/":
         savepath += "/"
     return savepath
+
+def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
+    """
+    Calculates the average and standard deviation of the values in a dictionary of random counts.
+
+    Args:
+    random_counts_merged (dict): A dictionary containing the merged random counts.
+
+    Returns:
+    A tuple containing two dictionaries: the first dictionary contains the average values for each key in the input dictionary,
+    and the second dictionary contains the standard deviation values for each key in the input dictionary.
+    """
+    avg_dict = {}
+    std_dict = {}
+    for k, v in random_counts_merged.items():
+        avg_dict[k] = np.mean(v)
+        std_dict[k] = np.std(v)
+    return avg_dict, std_dict
+
+def _merge_random_counts(random_counts_iterations:list) -> dict:
+    """
+    Merge the counts from multiple iterations of random sampling.
+
+    Args:
+    random_counts_iterations (list): A list of dictionaries, where each dictionary contains the counts for a single iteration of random sampling.
+
+    Returns:
+    dict: A dictionary containing the merged counts from all iterations of random sampling.
+    """
+    merged_counts = {}
+    for i in random_counts_iterations:
+        for k, v in i.items():
+            if k in merged_counts:
+                merged_counts[k].append(v)
+            else:
+                merged_counts[k] = [v]
+    return merged_counts
 #endregion
 
 #region STRING network functions

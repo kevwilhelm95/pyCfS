@@ -20,7 +20,7 @@ from statsmodels.stats.multitest import multipletests
 import multiprocessing as mp
 from scipy.stats import hypergeom, percentileofscore
 import os
-from .utils import _fix_savepath, _get_edge_weight, _get_combined_score, _select_evidences, _get_evidence_types, _load_string
+from .utils import _fix_savepath, _get_edge_weight, _get_combined_score, _select_evidences, _get_evidence_types, _load_string, _load_reactome, _define_background_list
 
 #region Consensus
 def _format_input_dict(list_names:list, gene_lists:list) -> dict:
@@ -222,12 +222,7 @@ def _get_reactomes(min_size: int, max_size: int) -> dict:
     Returns:
         dict: A dictionary with Reactome pathway names as keys and gene lists as values.
     """
-    reactomes_stream = pkg_resources.resource_stream(__name__, 'data/ReactomePathways_Mar2023.gmt')
-    reactomes = reactomes_stream.readlines()
-    reactomes = [x.decode('utf-8').strip('\n') for x in reactomes]
-    reactomes = [x.split('\t') for x in reactomes]
-    for x in reactomes:
-        x.pop(1)
+    reactomes = _load_reactome()
     #subtract 1 b/c name of Reactome is included with genes
     reactomes = [x for x in reactomes if len(x) - 1 >= min_size]
     reactomes = [x for x in reactomes if len(x) - 1 <= max_size]
@@ -591,7 +586,7 @@ def _load_reactome_genes(min_group_size:int, max_group_size:int) -> list:
         allgenes.extend(v)
     return list(set(allgenes))
 
-def _create_random_degree_matched_set(gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, named_sources:list, min_group_size:int, max_group_size:int) -> dict:
+def _create_random_degree_matched_set(gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, named_sources:list, min_group_size:int, max_group_size:int) -> dict:
     """
     Creates a random set of genes that are degree-matched to the input gene set.
 
@@ -607,6 +602,9 @@ def _create_random_degree_matched_set(gene_sets:dict, string_net_all_genes:list,
     - random_sets (dict): A dictionary where the keys are gene set names and the values are lists of randomly selected genes that are degree-matched to the input gene set.
     """
     random_sets = {}
+    # Filter for your background set of genes
+    degree_df = string_net_degree_df.copy()
+    degree_df = degree_df[degree_df.index.isin(background_genes)]
     for k, v in gene_sets.items():
         unique_mapped_genes = v
         # filter for genes mapped to STRING
@@ -625,18 +623,16 @@ def _create_random_degree_matched_set(gene_sets:dict, string_net_all_genes:list,
             reactome_genes = _load_reactome_genes(min_group_size, max_group_size)
             rng = np.random.default_rng(seed = set_num * 42)
             for k1, v1 in unique_mapped_genes_degree_dict.items():
-                degree_df = string_net_degree_df.copy()
-                degree_df = degree_df[degree_df['degree_rounded']==k1]
-                degree_df = degree_df[degree_df.index.isin(reactome_genes)]
-                degree_matched_genes = degree_df.index.tolist()
+                degree_df_matched = degree_df[degree_df['degree_rounded']==k1]
+                degree_df_matched = degree_df_matched[degree_df_matched.index.isin(reactome_genes)]
+                degree_matched_genes = degree_df_matched.index.tolist()
                 x = rng.choice(degree_matched_genes, v1, replace=False).tolist()
                 random_genes.extend(x)
         else:
             rng = np.random.default_rng(seed = set_num * 42)
             for k1, v1 in unique_mapped_genes_degree_dict.items():
-                degree_df = string_net_degree_df.copy()
-                degree_df = degree_df[degree_df['degree_rounded']==k1]
-                degree_matched_genes = degree_df.index.tolist()
+                degree_df_matched = degree_df[degree_df['degree_rounded']==k1]
+                degree_matched_genes = degree_df_matched.index.tolist()
                 x = rng.choice(degree_matched_genes, v1, replace=False).tolist()
                 random_genes.extend(x)
         random_sets[k] = random_genes
@@ -705,7 +701,7 @@ def _sort_cluster_dict(cluster_dict:dict, sources:dict) -> (dict, pd.DataFrame):
     sorted_cluster_df['source'] = sorted_cluster_df['gene'].map(sources)
     return sorted_cluster_dict, sorted_cluster_df
 
-def _multiprocessing_mcl(gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list) -> list:
+def _multiprocessing_mcl(gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list) -> list:
     """
     Runs MCL analysis on a given set of gene sets and returns the functional enrichment of the resulting clusters.
 
@@ -727,6 +723,7 @@ def _multiprocessing_mcl(gene_sets:dict, string_net_all_genes:list, string_net_d
     random_sets_clusters = []
     random_sets = _create_random_degree_matched_set(
         gene_sets,
+        background_genes,
         string_net_all_genes,
         string_net_degree_df,
         source_names,
@@ -767,17 +764,19 @@ def _multiprocessing_randomization(arg:tuple) -> list:
     - out_lst (list): A list of output values.
     """
     gene_sets = arg[0]
-    string_net_all_genes = arg[1]
-    string_net_degree_df = arg[2]
-    source_names = arg[3]
-    min_group_size = arg[4]
-    max_group_size = arg[5]
-    string_net = arg[6]
-    true_inflation_parameter = arg[7]
-    functional_groups = arg[8]
-    functional_groups_names = arg[9]
+    background_genes = arg[1]
+    string_net_all_genes = arg[2]
+    string_net_degree_df = arg[3]
+    source_names = arg[4]
+    min_group_size = arg[5]
+    max_group_size = arg[6]
+    string_net = arg[7]
+    true_inflation_parameter = arg[8]
+    functional_groups = arg[9]
+    functional_groups_names = arg[10]
     out_lst = _multiprocessing_mcl(
         gene_sets,
+        background_genes,
         string_net_all_genes,
         string_net_degree_df,
         source_names,
@@ -790,7 +789,7 @@ def _multiprocessing_randomization(arg:tuple) -> list:
     )
     return out_lst
 
-def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list, cores:int) -> list:
+def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list, cores:int) -> list:
     """
     This function performs multiprocessing randomization of gene sets.
 
@@ -813,6 +812,7 @@ def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, string_
     """
     args_ = tuple(zip(
         [gene_sets] * random_iter,
+        [background_genes] * random_iter,
         [string_net_all_genes] * random_iter,
         [string_net_degree_df] * random_iter,
         [source_names] * random_iter,
@@ -971,7 +971,7 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
                 continue
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict):
+def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict):
     """
     Perform functional clustering analysis on a set of genes.
 
@@ -1006,6 +1006,12 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         pathways_min_group_size,
         pathways_max_group_size
     )
+    # Determine background gene set
+    if custom_background == 'string':
+        background_genes = string_net_all_genes
+    else:
+        background_dict, background_name = _define_background_list(custom_background)
+        background_genes = background_dict[background_name]
     # true gene sets and set of all input genes
     gene_sets, source_names = _clean_query([genes_1, genes_2, genes_3, genes_4, genes_5], source_names)
     gene_sources, input_genes = _get_gene_sources(gene_sets)
@@ -1015,11 +1021,11 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
     true_cluster_dict, true_cluster_df = _sort_cluster_dict(true_cluster_dict, gene_sources)
     # Perform True Cluster Functional Enrichment
     true_clusters_enrichment_df_dict = _cluster_functional_enrichment(
-        functional_groups, functional_groups_names, true_cluster_dict, string_net_all_genes
+        functional_groups, functional_groups_names, true_cluster_dict, background_genes
     )
     # Perform Random Cluster Functional Enrichment
     randomization_output = _pool_multiprocessing_randomization(
-        random_iter, gene_sets, string_net_all_genes, string_net_degree_df, source_names, pathways_min_group_size, pathways_max_group_size, string_net, true_inflation_parameter, functional_groups, functional_groups_names, cores
+        random_iter, gene_sets, background_genes, string_net_all_genes, string_net_degree_df, source_names, pathways_min_group_size, pathways_max_group_size, string_net, true_inflation_parameter, functional_groups, functional_groups_names, cores
     )
     random_sets_clusters = []
     random_sets_clusters_enrichment = []
