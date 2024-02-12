@@ -20,7 +20,7 @@ setuptools.setup(
         'venn', 'scipy', 'networkx',
         'biopython', 'upsetplot', 'markov_clustering',
         'statsmodels', 'pyarrow', 'adjustText',
-        'seaborn', 'tqdm', 'collections', 'scipy', 'sklearn'
+        'seaborn', 'tqdm', 'scipy', 'sklearn'
     ],
     classifiers = [
         'Programming Language :: Python',
