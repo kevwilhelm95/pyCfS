@@ -7,129 +7,22 @@ import pandas as pd
 import numpy as np
 from typing import Any
 from statsmodels.stats.multitest import multipletests
-from scipy.stats import norm
+from scipy.stats import norm, mannwhitneyu
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import requests
 from adjustText import adjust_text
 import seaborn as sns
 from PIL import Image
+from typing import Any
 import io
 import os
 import math
 import multiprocessing
-
-
-#region Common functions
-def _load_grch38_background(just_genes:bool = True) -> Any:
-    """Return list of background genes from GRCh38
-
-    Contains the following fields:
-        chrom           object
-        gene            str
-        start           int64
-        end             int64
-    Returns
-    -------
-        list: List of genes annotated in GRCh38_v94
-    """
-    stream = pkg_resources.resource_stream(__name__, 'data/ENSEMBL-lite_GRCh38.v94.txt')
-    df = pd.read_csv(stream, sep = '\t')
-    if just_genes:
-        return df['gene'].tolist()
-    else:
-        df.set_index('gene', inplace = True)
-        return df
-
-def _merge_random_counts(random_counts_iterations:list) -> dict:
-    """
-    Merge the counts from multiple iterations of random sampling.
-
-    Args:
-    random_counts_iterations (list): A list of dictionaries, where each dictionary contains the counts for a single iteration of random sampling.
-
-    Returns:
-    dict: A dictionary containing the merged counts from all iterations of random sampling.
-    """
-    merged_counts = {}
-    for i in random_counts_iterations:
-        for k, v in i.items():
-            if k in merged_counts:
-                merged_counts[k].append(v)
-            else:
-                merged_counts[k] = [v]
-    return merged_counts
-
-def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
-    """
-    Calculates the average and standard deviation of the values in a dictionary of random counts.
-
-    Args:
-    random_counts_merged (dict): A dictionary containing the merged random counts.
-
-    Returns:
-    A tuple containing two dictionaries: the first dictionary contains the average values for each key in the input dictionary,
-    and the second dictionary contains the standard deviation values for each key in the input dictionary.
-    """
-    avg_dict = {}
-    std_dict = {}
-    for k, v in random_counts_merged.items():
-        avg_dict[k] = np.mean(v)
-        std_dict[k] = np.std(v)
-    return avg_dict, std_dict
-
-def _load_open_targets_mapping() -> pd.DataFrame:
-    """
-    Load the open targets mapping data from a file and return it as a pandas DataFrame.
-
-    Returns:
-        pd.DataFrame: The mapping data with columns for ensgID and geneNames.
-    """
-    mapping_stream = pkg_resources.resource_stream(__name__, 'data/biomart_ensgID_geneNames_08162023.txt')
-    mapping_df = pd.read_csv(mapping_stream, sep='\t')
-    return mapping_df
-
-#endregion
-
-
+from .utils import _fix_savepath, _load_open_targets_mapping, _get_avg_and_std_random_counts, _merge_random_counts, _define_background_list, _get_open_targets_gene_mapping
 
 #region Mouse Phenotype
-def _get_gene_mapping(background_:str) -> (dict, dict):
-    """
-    Returns a tuple containing two dictionaries:
-    1. A dictionary mapping Ensembl gene IDs to gene names
-    2. A dictionary containing background genes from Reactome and Ensembl
-
-    Returns:
-    -------
-    tuple:
-        A tuple containing two dictionaries:
-        1. A dictionary mapping Ensembl gene IDs to gene names
-        2. A dictionary containing background genes from Reactome and Ensembl
-    """
-    mapping_df = _load_open_targets_mapping()
-    mapping_dict = dict(zip(mapping_df['Gene stable ID'].tolist(), mapping_df['Gene name'].tolist()))
-
-    #reactome background genes
-    if background_ == "Reactomes":
-        reactomes_stream = pkg_resources.resource_stream(__name__, 'data/ReactomePathways_Mar2023.gmt')
-        reactomes = reactomes_stream.readlines()
-        reactomes = [x.decode('utf-8').strip('\n') for x in reactomes]
-        reactomes = [x.split('\t') for x in reactomes]
-        reactomes_bkgd = []
-        for p in reactomes:
-            genes = p[2:]
-            reactomes_bkgd.extend(genes)
-        reactomes_bkgd = list(set(reactomes_bkgd))
-        background_dict = {'Reactomes':reactomes_bkgd}
-
-    # ENSEMBL background genes
-    if background_ == "ensembl":
-        ensembl_bkgd = _load_grch38_background(just_genes=True)
-        background_dict = {'ensembl':ensembl_bkgd}
-
-    return mapping_dict, background_dict
-
-def _load_mouse_phenotypes(background_:str) -> (pd.DataFrame, list, dict):
+def _load_mouse_phenotypes() -> (pd.DataFrame, list):
     """
     Loads mouse phenotype data from a parquet file and returns a dataframe of the data, a list of unique gene IDs, and a
     dictionary of background information.
@@ -137,17 +30,16 @@ def _load_mouse_phenotypes(background_:str) -> (pd.DataFrame, list, dict):
     Returns:
         mgi_df (pd.DataFrame): A dataframe of the mouse phenotype data.
         mgi_genes (list): A list of unique gene IDs.
-        background_dict (dict): A dictionary of background information.
     """
     mgi_stream = pkg_resources.resource_stream(__name__, 'data/mousePhenotypes/part-00000-acbeac24-79db-4a95-8d79-0ae045cb6538-c000.snappy.parquet')
     mgi_df = pd.read_parquet(mgi_stream, engine='pyarrow')
     # Get the mappings
-    mapping_dict, background_dict = _get_gene_mapping(background_)
+    mapping_dict = _get_open_targets_gene_mapping()
     mgi_df['gene_ID'] = mgi_df['targetFromSourceId'].map(mapping_dict)
     mgi_df['upperPheno'] = mgi_df['modelPhenotypeClasses'].apply(lambda x: x[0]['label'])
     mgi_genes = mgi_df['gene_ID'].unique().tolist()
 
-    return mgi_df, mgi_genes, background_dict
+    return mgi_df, mgi_genes
 
 def _get_pheno_counts(matrix:pd.DataFrame, gene_list:list) -> dict:
     """
@@ -375,6 +267,9 @@ def _or_fdr(matrix:pd.DataFrame) -> pd.DataFrame:
     """
     matrix = matrix.sort_values(by='pvalue')
     pvals = list(matrix['pvalue'])
+    if len(pvals) == 0:
+        matrix['fdr'] = np.nan
+        return matrix
     qvals = multipletests(pvals, alpha=0.05, method='fdr_bh', is_sorted=True)[1]
     # changed method for qval calculation
     matrix['fdr'] = qvals
@@ -410,8 +305,9 @@ def _get_output_matrix(target_counts:dict, random_dict:dict, model_pheno_label_g
     )
 
     summary_df = summary_df[summary_df['z-score'] != 'no_z-score']
-    summary_df['z-score'] = summary_df['z-score'].apply(pd.to_numeric, errors='coerce')
-    summary_df['pvalue'] = norm.sf(abs(summary_df['z-score'])) * 2
+    summary_df['z-score'] = summary_df['z-score'].astype(float)
+    is_nan_mask = np.isnan(summary_df['z-score'])
+    summary_df['pvalue'] = np.where(is_nan_mask, np.nan, norm.sf(np.abs(summary_df['z-score'])) * 2)
     summary_df = summary_df.dropna(subset=['pvalue'], axis=0)
     summary_df = summary_df[summary_df['RandomStdFreq'] != 0]
     summary_df = _or_fdr(summary_df)
@@ -661,7 +557,7 @@ def _get_fdr_plot(summary_matrix:pd.DataFrame, bin_size:float, x_min:float, x_ma
     plt.close()
     return image
 
-def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image):
+def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image):
     """
     Performs a phenotype enrichment analysis on a list of genes using the Mouse Genome Informatics (MGI) database.
 
@@ -680,7 +576,8 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
     - strip_plot (matplotlib.pyplot): A strip plot of the enrichment analysis results.
     - fdr_plot (matplotlib.pyplot): A plot of the false discovery rate (FDR) distribution for the enrichment analysis results.
     """
-    mgi_df, mgi_genes, background_dict = _load_mouse_phenotypes(background)
+    background_dict, background_name = _define_background_list(custom_background, just_genes = True)
+    mgi_df, mgi_genes = _load_mouse_phenotypes()
     target_genes_pheno_counts = _get_pheno_counts(mgi_df, query)
     model_pheno_label_gene_mappings = _get_pheno_gene_mappings(mgi_df, mgi_genes, cores)
     # Summary - Write to file
@@ -699,7 +596,7 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
     )
     #random iterations set at 1000x
     random_iter_dict = _get_random_iteration_pheno_counts(
-        background,
+        background_name,
         background_dict,
         mgi_genes_representation,
         target_genes_representation_counts,
@@ -731,16 +628,17 @@ def mouse_phenotype_enrichment(query:list, background:str = 'ensembl', random_it
 
     # Output files
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        summary_df.to_csv(savepath + 'MGI_Lower-Level_PhenoEnrichment.csv')
-        strip_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment.png")
-        z_dist_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_ZscoreDist.png")
-        p_val_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_PvalDist.png")
-        fdr_plot.save(savepath + "MGI_Lower-Level_PhenoEnrichment_FdrDist.png")
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'MGI_Mouse_Phenotypes/')
+        os.makedirs(new_savepath, exist_ok=True)
+        summary_df.to_csv(new_savepath + 'MGI_Lower-Level_PhenoEnrichment.csv')
+        strip_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment.png")
+        z_dist_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment_ZscoreDist.png")
+        p_val_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment_PvalDist.png")
+        fdr_plot.save(new_savepath + "MGI_Lower-Level_PhenoEnrichment_FdrDist.png")
 
     return summary_df, strip_plot, fdr_plot
 #endregion
-
 
 
 #region Protein Family
@@ -810,7 +708,7 @@ def _get_protein_class_data(targets_df: pd.DataFrame, mapping_dict:dict) -> (pd.
 
     return targets_df, targets_class_proteins_genes
 
-def _get_family_files(background:str) -> (pd.DataFrame, list, dict):
+def _get_family_files() -> (pd.DataFrame, list):
     """
     Load protein family data and clean the protein family table.
 
@@ -823,7 +721,7 @@ def _get_family_files(background:str) -> (pd.DataFrame, list, dict):
     background_dict (dict): The background data dictionary.
     """
     # Load background data
-    mapping_dict, background_dict = _get_gene_mapping(background)
+    mapping_dict = _get_open_targets_gene_mapping()
     # Load protein family data
     family_ref_stream = pkg_resources.resource_stream(__name__, 'data/targetsFileList.txt')
     family_ref_df = family_ref_stream.readlines()
@@ -835,9 +733,8 @@ def _get_family_files(background:str) -> (pd.DataFrame, list, dict):
         targets_df = pd.concat([targets_df, df], axis=0)
     # Get protein class data
     targets_class_df, targets_class_df_gene_list = _get_protein_class_data(targets_df, mapping_dict)
-    # Get protein class data
 
-    return targets_class_df, targets_class_df_gene_list, background_dict
+    return targets_class_df, targets_class_df_gene_list
 
 def _get_level_gene_mappings(targets_df:pd.DataFrame) -> dict:
     """
@@ -1050,7 +947,7 @@ def _protein_class_strip_plot(df:pd.DataFrame, q_cut:float, sig_dot_color:str, f
     plt.close()
     return image
 
-def protein_family_enrichment(query:list, background:str = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image):
+def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image):
     """
     Perform protein family enrichment analysis.
 
@@ -1071,7 +968,8 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
         Image: Plot of the enrichment analysis.
     """
     # Get input data
-    targets_class_df, targets_class_df_genelist, background_dict = _get_family_files(background)
+    background_dict, background_name = _define_background_list(custom_background, just_genes = True)
+    targets_class_df, targets_class_df_genelist = _get_family_files()
     # Get Level mappings
     target_class_level_gene_mappings = _get_level_gene_mappings(targets_class_df)
     print('{}/{} target genes in Open Targets'.format(
@@ -1087,7 +985,7 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
         ##### How do I do all the levels? I thought this ran everything
         #random iterations set at 5000x
         random_iter_dict = _get_random_iteration_class_counts(
-            background,
+            background_name,
             background_dict,
             query,
             targets_class_df,
@@ -1111,9 +1009,11 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
     # Generate plots
     plot = _protein_class_strip_plot(summary_df, plot_q_cut, plot_sig_dot_color, plot_fontsize, plot_fontface)
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        summary_df.to_csv(savepath + 'Open-Targets_ProteinClass-' + ",".join(level) + '_Enrichment.csv')
-        plot.save(savepath + "Open-Targets_ProteinClass-" + ",".join(level) + "_Enrichment.png")
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Protein_Family_Enrichment/')
+        os.makedirs(new_savepath, exist_ok=True)
+        summary_df.to_csv(new_savepath + 'Open-Targets_ProteinClass-' + ",".join(level) + '_Enrichment.csv')
+        plot.save(new_savepath + "Open-Targets_ProteinClass-" + ",".join(level) + "_Enrichment.png")
     return summary_df, plot
 
 #endregion
@@ -1124,11 +1024,245 @@ def protein_family_enrichment(query:list, background:str = 'ensembl', level:list
 
 
 #region DepMap Scores
+def _load_depmap() -> (pd.DataFrame, list):
+    """
+    Load the DepMap data from a feather file and return a DataFrame and a list of all DepMap IDs.
+
+    Returns:
+        df (pd.DataFrame): The loaded DepMap data as a DataFrame.
+        all_depmap (list): A list of all DepMap IDs.
+    """
+    stream = pkg_resources.resource_stream(__name__, 'data/CRISPR_(DepMap_22Q2_Public+Score,_Chronos)_.feather')
+    df = pd.read_feather(stream)
+    all_depmap = df['depmap_id'].tolist()
+    df.set_index('depmap_id', inplace = True)
+    return df, all_depmap
+
+def _check_cancer_type(df:pd.DataFrame, cancer_type:list) -> list:
+    """
+    Check if the given cancer types exist in any of the lineage columns of the DataFrame.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the lineage columns.
+    cancer_type (list): The list of cancer types to check.
+
+    Returns:
+    list: The list of valid cancer types that exist in the lineage columns.
+    """
+    valid = []
+    for name in cancer_type:
+        # Check if the name exists in any of the lineage columns
+        exists_in_lineage = (
+            df['lineage_1'].str.contains(name).any() |
+            df['lineage_2'].str.contains(name).any() |
+            df['lineage_3'].str.contains(name).any() |
+            df['lineage_4'].str.contains(name).any()
+        )
+        # If the name does not exist, print it
+        if not exists_in_lineage:
+            print(f"{name} does not exist in any 'lineage' columns.")
+        else:
+            valid.append(name)
+    if not valid:
+        raise ValueError("No valid cancer types found. Please check the provided cancer types.")
+    print(f"Valid cancer types: {valid}")
+    return valid
+
+def _cancer_specific_depmap(df: pd.DataFrame, cancer_type: list) -> pd.DataFrame:
+    """
+    Filter the given DataFrame for specific cancer types.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        cancer_type (list): A list of cancer types to filter for.
+
+    Returns:
+        pd.DataFrame: The filtered DataFrame without the unneeded columns.
+    """
+    # Filter for cancer types
+    cancer_type = _check_cancer_type(df, cancer_type)
+    names = '|'.join(cancer_type)
+    depmap_filt = df[
+        df['lineage_1'].str.contains(names) |
+        df['lineage_2'].str.contains(names) |
+        df['lineage_3'].str.contains(names) |
+        df['lineage_4'].str.contains(names)
+    ]
+    if depmap_filt.empty:
+        raise ValueError("No cell lines found for the given cancer type. Please check the provided cancer type.")
+    # Drop unneeded columns
+    depmap_filt = depmap_filt.drop(columns=['cell_line_display_name', 'lineage_1', 'lineage_2', 'lineage_3', 'lineage_4'])
+    total_genes = len(depmap_filt.columns)
+    return depmap_filt, total_genes
+
+def _gene_specific_depmap(df:pd.DataFrame, genes:list) -> pd.DataFrame:
+    """
+    Filter the input DataFrame for specific genes and calculate the average scores for each gene.
+
+    Parameters:
+    df (pd.DataFrame): The input DataFrame.
+    genes (list): The list of genes to filter for.
+
+    Returns:
+    df_sub (pd.DataFrame): The filtered DataFrame containing only the specified genes.
+    avg_scores (list): The average scores for each gene.
+    """
+    if not genes:
+        raise ValueError("No genes provided. Please provide a list of genes to filter for.")
+    # Filter for genes
+    filt_genes_no_missing = [x for x in genes if x in df.columns]
+    df_sub = df[filt_genes_no_missing]
+    # Get the average scores
+    avg_scores = df_sub.mean(axis=0).tolist()
+    return df_sub, avg_scores, filt_genes_no_missing
+
+def _plot_depmap_distributions(query_avg_score:list, control_avg_score:list, p_value: float, cancer_type:list, fontface:str, fontsize:int, plot_query_color:str, plot_background_color:str) -> Image:
+    """
+    Plots the distributions of query and control average scores and returns the image.
+
+    Args:
+        query_avg_score (list): List of query average scores.
+        control_avg_score (list): List of control average scores.
+        p_value (float): The p-value.
+        cancer_type (list): List of cancer types.
+        fontface (str): Font face for the plot.
+        fontsize (int): Font size for the plot.
+        plot_query_color (str): Color for the query genes plot.
+        plot_background_color (str): Color for the background plot.
+
+    Returns:
+        Image: The plotted image.
+
+    """
+    plt.rcParams.update({'font.size': fontsize,
+                    'font.family': fontface})
+    _, ax = plt.subplots(figsize = (6, 4), tight_layout = True)
+    ax.hist(
+        [query_avg_score, control_avg_score],
+        color = [plot_query_color, plot_background_color],
+        density = True,
+        bins = np.arange(-2.6, 0.51, 0.1)
+    )
+    # Set the legend
+    custom_lines = [Line2D([0], [0], color=plot_query_color, lw=4),
+                    Line2D([0], [0], color=plot_background_color, lw=4),
+                    Line2D([0], [0], color='none')]
+    # Update legend with the p-value
+    ax.legend(custom_lines, [
+        f'Query Genes, Mean = {np.mean(query_avg_score):.2f}',
+        f'Control Genes, Mean = {np.mean(control_avg_score):.2f}',
+        f'P-value = {p_value:.2e}'
+    ], fontsize=fontsize)
+    # Adjust plot axes
+    plt.xlabel(f'Average {",".join(cancer_type)} Chronos Score', fontsize = 16)
+    plt.ylabel('Normalized Gene Count', fontsize = 16)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    plt.tight_layout()
+    plt.xticks(size = fontsize)
+    plt.yticks(size = fontsize)
+    # Save plot
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format = 'png', dpi = 300)
+    buffer.seek(0)
+    image = Image.open(buffer)
+    plt.close()
+    return image
+
+def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'depmap', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_query_color:str = 'red', plot_background_color:str = 'gray', savepath:str = False) -> (float, Image):
+    """
+    Performs enrichment analysis using DepMap scores for a given query gene list and cancer type.
+
+    Args:
+        query (list): List of query genes.
+        cancer_type (list): List of cancer types.
+        control_genes (list, optional): List of control genes. Defaults to an empty list.
+        plot_fontface (str, optional): Font face for the plot. Defaults to 'Avenir'.
+        plot_fontsize (int, optional): Font size for the plot. Defaults to 14.
+        plot_query_color (str, optional): Color for the query gene distribution in the plot. Defaults to 'red'.
+        plot_background_color (str, optional): Color for the background gene distribution in the plot. Defaults to 'gray'.
+        savepath (str, optional): Path to save the output files. Defaults to False.
+
+    Returns:
+        tuple: A tuple containing the p-value and the plot image.
+    """
+    # Load depmap scores
+    depmap_df, _ = _load_depmap()
+    # Clean and filter depmap_df for cancer type
+    depmap_filt, depmap_total_genes = _cancer_specific_depmap(depmap_df, cancer_type)
+
+    # Subset for genes of interest
+    _, query_avg_score, query_genes_clean = _gene_specific_depmap(depmap_filt, query)
+
+    # Get control or background genes
+    if custom_background == 'depmap':
+        background_name = 'DepMap'
+        background_genes = [x for x in depmap_filt.columns.tolist() if x not in query]
+        _, control_avg_score, control_genes_clean = _gene_specific_depmap(depmap_filt, background_genes)
+        total_control = depmap_total_genes
+    else:
+        background_dict, background_name = _define_background_list(custom_background, just_genes = True)
+        control_genes = background_dict[background_name]
+        _, control_avg_score, control_genes_clean = _gene_specific_depmap(depmap_filt, control_genes)
+        total_control = len(control_genes)
+
+    # Calculate the p-value
+    _, p_val = mannwhitneyu(query_avg_score, control_avg_score)
+
+    # Plot distributions
+    plot = _plot_depmap_distributions(query_avg_score, control_avg_score, p_val, cancer_type, plot_fontface, plot_fontsize, plot_query_color, plot_background_color)
+
+    # Save the files
+    if savepath:
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'DepMap_Enrichment')
+        os.makedirs(new_savepath, exist_ok=True)
+        # Save p-value
+        with open(os.path.join(new_savepath, 'p_value.txt'), 'w') as f:
+            f.write(f"Number of cell lines for {','.join(cancer_type)}: {len(depmap_filt)}\n")
+            f.write(f'Number of query genes with scores: {len(query_avg_score)}/{len(query)}\n')
+            f.write(f'Number of control genes (from {background_name}) with scores: {len(control_avg_score)}/{total_control}\n')
+            f.write(f'Mann-Whitney U p-value: {p_val:.6e}')
+
+        # Save scores
+        score_col_name = f'Avg_{",".join(cancer_type)}_Score'
+        query_df = pd.DataFrame({
+            'Genes': query_genes_clean,
+            score_col_name : query_avg_score
+        })
+        query_df.sort_values(
+            by=score_col_name, ascending = True
+        ).to_csv(
+            os.path.join(new_savepath, 'Query_Avg_Score.txt'), sep = '\t', header = False, index = False
+        )
+
+        control_df = pd.DataFrame({
+            'Genes': control_genes_clean,
+            score_col_name : control_avg_score
+        })
+        control_df.sort_values(
+            by = score_col_name, ascending = True
+        ).to_csv(
+            os.path.join(new_savepath, 'Control_Avg_Score.txt'), sep = '\t', header = False, index = False
+        )
+        # Save plot
+        plot.save(os.path.join(new_savepath, 'DepMap_Enrichment.png'))
+
+    return p_val, plot
 #endregion
 
 
 #region DrugBank/OpenTargets Drugs
-def _parse_dgi_db(data):
+def _parse_dgi_db(data:dict) -> pd.DataFrame:
+    """
+    Parses the DGI database data and returns a DataFrame with the extracted information.
+
+    Parameters:
+    data (dict): The DGI database data.
+
+    Returns:
+    pandas.DataFrame: A DataFrame containing the parsed information from the DGI database.
+    """
     flattened_data = []
     # Loop through each gene's interactionss
     for gene_data in data['data']['genes']['nodes']:
@@ -1209,7 +1343,6 @@ def _parse_dgi_db(data):
             flattened_data.append(interaction_entry)
 
     df = pd.DataFrame(flattened_data)
-    
     return df
 
 def _get_dgidb_data(query:list, min_interaction_citations:int, approved: bool) -> pd.DataFrame:
@@ -1385,12 +1518,13 @@ def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgid
         method_data['DGIdb'] = dgi_db
 
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'DrugGeneInteractions/')
+        os.makedirs(new_savepath, exist_ok=True)
         # Save files
         for key, value in method_data.items():
-            value.to_csv(savepath + f'{key}_DrugGeneInteractions.csv', index = False)
+            value.to_csv(new_savepath + f'{key}_DrugGeneInteractions.csv', index = False)
 
     return method_data
 
 #endregion
-

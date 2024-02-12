@@ -20,145 +20,7 @@ from statsmodels.stats.multitest import multipletests
 import multiprocessing as mp
 from scipy.stats import hypergeom, percentileofscore
 import os
-
-#region Common functions
-def _load_string() -> pd.DataFrame:
-    """Return a dataframe of STRINGv11 protein-protein interactions
-
-    Contains the following fields:
-        node1               str
-        node2               str
-        neighborhood        int64
-        fusion              int64
-        cooccurrence        int64
-        coexpression        int64
-        experimental        int64
-        database            int64
-        textmining          int64
-        combined_score      int64
-    Returns
-    -------
-        pd.DataFrame of STRINGv11 protein interactions
-    """
-    stream = pkg_resources.resource_stream(__name__, 'data/STRINGv11_ProteinNames_DetailedEdges_07062022.feather')
-    return pd.read_feather(stream)
-
-def _get_evidence_types(evidence_lst: list) -> list:
-    """
-    Processes and returns a list of evidence types for network analysis.
-
-    This function takes a list of evidence types and, if 'all' is included in the list, replaces it with a predefined set
-    of evidence types. It is primarily used to standardize and expand the evidence types used in network-based analyses.
-
-    Args:
-        evidence_lst (list): A list of strings indicating the types of evidence to be included. If the list contains 'all',
-                             it is replaced with a complete set of predefined evidence types.
-
-    Returns:
-        list: A list of evidence types. If 'all' was in the original list, it is replaced by a comprehensive list of evidence types;
-              otherwise, the original list is returned.
-
-    Note:
-        The predefined set of evidence types includes 'neighborhood', 'fusion', 'cooccurence', 'coexpression',
-        'experimental', 'database', and 'textmining'. This function is particularly useful for initializing or
-        configuring network analysis functions where a broad range of evidence types is desired.
-    """
-    if 'all' in evidence_lst:
-        evidence_lst = ['neighborhood', 'fusion', 'cooccurence',
-                        'coexpression', 'experimental', 'database', 'textmining']
-    return evidence_lst
-
-def _select_evidences(evidence_lst: list, network: pd.DataFrame) -> pd.DataFrame:
-    """
-    Selects and returns specified columns from a network DataFrame.
-
-    Given a list of evidence column names and a network DataFrame, this function extracts the specified columns
-    along with the 'node1' and 'node2' columns from the network DataFrame and returns them as a new DataFrame.
-    This is useful for filtering and focusing on specific aspects of a network represented in a DataFrame.
-
-    Args:
-        evidence_lst (list): A list of column names representing the evidence to be selected from the network DataFrame.
-        network (pd.DataFrame): The network DataFrame containing at least 'node1' and 'node2' columns,
-                                along with other columns that may represent different types of evidence or attributes.
-
-    Returns:
-        pd.DataFrame: A DataFrame consisting of the 'node1' and 'node2' columns from the original network DataFrame,
-                      as well as the additional columns specified in evidence_lst.
-
-    Note:
-        The function assumes that the network DataFrame contains 'node1' and 'node2' columns and that all column
-        names provided in evidence_lst exist in the network DataFrame. If any column in evidence_lst does not exist
-        in the network DataFrame, a KeyError will be raised.
-    """
-    return network[['node1', 'node2'] + evidence_lst]
-
-def _get_combined_score(net_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculates and appends a combined score for each row in a network DataFrame.
-
-    This function takes a network DataFrame with various evidence scores and computes a combined score for each row.
-    The combined score is a weighted measure based on the individual evidence scores present in the DataFrame, adjusted
-    by a pre-defined probability value.
-
-    Args:
-        net_df (pd.DataFrame): A DataFrame containing network data. The first two columns are expected to be 'node1' and 'node2',
-                               followed by columns representing different types of evidence scores.
-
-    Returns:
-        pd.DataFrame: The original DataFrame with an additional 'score' column appended, representing the combined score for each row.
-
-    Note:
-        The calculation of the combined score uses a fixed probability value (p = 0.041) to adjust the evidence scores.
-        Scores are first normalized, then combined using a product method, and finally adjusted by the probability value.
-        This function assumes that the evidence scores are represented as integers in the range 0-1000.
-    """
-    cols = net_df.columns.values.tolist()
-    cols = cols[2:]
-    p = 0.041
-    for col in cols:
-        net_df[col] = 1-((net_df[col]/1000) - p) / (1 -p)
-        net_df[col] = np.where(net_df[col] > 1, 1, net_df[col])
-    net_df['score'] = 1 - np.product([net_df[i] for i in cols], axis=0)
-    net_df['score'] = net_df['score'] + p * (1 - net_df['score'])
-    return net_df
-
-def _get_edge_weight(edge_confidence:str) -> float:
-    """
-    Determines the weight of an edge based on its confidence level.
-
-    This function assigns a numerical weight to an edge in a network based on a provided confidence level string.
-    Different confidence levels correspond to different predefined weights.
-
-    Args:
-        edge_confidence (str): A string representing the confidence level of an edge. Accepted values are
-                               'low', 'high', 'highest', and 'all'. Any other value is treated as a default case.
-
-    Returns:
-        float: The weight assigned to the edge. This is determined by the confidence level:
-               - 'low' results in a weight of 0.2
-               - 'high' results in a weight of 0.7
-               - 'highest' results in a weight of 0.9
-               - 'all' results in a weight of 0.0
-               - Any other value defaults to a weight of 0.4.
-
-    Note:
-        This function is typically used in network analysis where edges have varying levels of confidence, and a numerical
-        weight needs to be assigned for computational purposes.
-    """
-    if edge_confidence == 'low':
-        weight = 0.2
-    elif edge_confidence == 'high':
-        weight = 0.7
-    elif edge_confidence == 'highest':
-        weight = 0.9
-    elif edge_confidence == 'all':
-        weight = 0.0
-    else:
-        weight = 0.4
-    return weight
-#endregion
-
-
+from .utils import _fix_savepath, _get_edge_weight, _get_combined_score, _select_evidences, _get_evidence_types, _load_string, _load_reactome, _define_background_list
 
 #region Consensus
 def _format_input_dict(list_names:list, gene_lists:list) -> dict:
@@ -257,7 +119,7 @@ def _upset_plot(result_dict:dict, fontsize:int, fontface:str) -> Image:
 
     return image
 
-def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image):
+def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image): # type: ignore
     """
     Combines multiple lists of genes, excluding NaNs, counts occurrences of each gene, and tracks the lists they came from.
 
@@ -302,16 +164,18 @@ def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False,
     df = df.sort_values(by='occurrences', ascending=False)
     # Save and output
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        df.to_csv(savepath + "ConsensusGenes.csv", index=False)
-        upset_plot.save(savepath + "UpsetPlot.png", bbox_inches='tight', pad_inches=0.5)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Consensus/')
+        os.makedirs(new_savepath, exist_ok=True)
+        df.to_csv(new_savepath + "ConsensusGenes.csv", index=False)
+        upset_plot.save(new_savepath + "UpsetPlot.png", bbox_inches='tight', pad_inches=0.5)
     return df, upset_plot
 #endregion
 
 
 
 #region Functional Clustering
-def _load_clean_network(evidences:list, edge_confidence:str) -> (pd.DataFrame, list, pd.DataFrame):
+def _load_clean_network(evidences:list, edge_confidence:str) -> (pd.DataFrame, list, pd.DataFrame): # type: ignore
     """
     Load and customize STRINGv11 network for analysis.
 
@@ -358,12 +222,7 @@ def _get_reactomes(min_size: int, max_size: int) -> dict:
     Returns:
         dict: A dictionary with Reactome pathway names as keys and gene lists as values.
     """
-    reactomes_stream = pkg_resources.resource_stream(__name__, 'data/ReactomePathways_Mar2023.gmt')
-    reactomes = reactomes_stream.readlines()
-    reactomes = [x.decode('utf-8').strip('\n') for x in reactomes]
-    reactomes = [x.split('\t') for x in reactomes]
-    for x in reactomes:
-        x.pop(1)
+    reactomes = _load_reactome()
     #subtract 1 b/c name of Reactome is included with genes
     reactomes = [x for x in reactomes if len(x) - 1 >= min_size]
     reactomes = [x for x in reactomes if len(x) - 1 <= max_size]
@@ -372,7 +231,7 @@ def _get_reactomes(min_size: int, max_size: int) -> dict:
     reactome_dict = dict(zip(reactomes_names, reactomes_genes))
     return reactome_dict
 
-def _get_go_terms(min_size: int, max_size: int) -> (dict, dict, dict):
+def _get_go_terms(min_size: int, max_size: int) -> (dict, dict, dict): # type: ignore
     """
     Returns three dictionaries containing Gene Ontology (GO) terms for biological processes, cellular components, and molecular functions.
 
@@ -444,7 +303,7 @@ def _get_wikipathways(min_size:int, max_size:int) -> dict:
     wiki_dict = dict(zip(wiki_names, wiki_genes))
     return wiki_dict
 
-def _get_functional_sets(min_size: int, max_size: int) -> (list, list):
+def _get_functional_sets(min_size: int, max_size: int) -> (list, list): # type: ignore
     """
     Returns a list of functional groups and their names based on the minimum and maximum size of the groups.
 
@@ -468,7 +327,7 @@ def _get_functional_sets(min_size: int, max_size: int) -> (list, list):
     functional_groups_names = ['reactomes', 'go_bp', 'go_cc', 'go_mf', 'kegg','wiki']
     return functional_groups, functional_groups_names
 
-def _clean_query(gene_list:list, source_names:Any) -> (dict, list):
+def _clean_query(gene_list:list, source_names:Any) -> (dict, list): # type: ignore
     """
     Given a list of genes, creates a dictionary where each key is a set name and each value is a gene from the input list.
 
@@ -488,7 +347,7 @@ def _clean_query(gene_list:list, source_names:Any) -> (dict, list):
         gene_dict[sets[i]] = gene_list[i]
     return gene_dict, sets
 
-def _get_gene_sources(set_dict: dict) -> (dict, list):
+def _get_gene_sources(set_dict: dict) -> (dict, list): # type: ignore
     """
     Given a dictionary of sets, where each set contains proteins, returns a dictionary where the keys are proteins and the values are lists of sets that contain the protein.
     Also returns a list of all proteins in the dictionary.
@@ -570,7 +429,7 @@ def _get_input_gene_network(gene_lst: list, network: pd.DataFrame) -> pd.DataFra
 
     return n_df_final
 
-def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Graph, dict):
+def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Graph, dict): # type: ignore
     """
     Runs the MCL algorithm on a given network and returns the clusters, the inflation parameter used, the graph, and a dictionary of clusters.
 
@@ -727,7 +586,7 @@ def _load_reactome_genes(min_group_size:int, max_group_size:int) -> list:
         allgenes.extend(v)
     return list(set(allgenes))
 
-def _create_random_degree_matched_set(gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, named_sources:list, min_group_size:int, max_group_size:int) -> dict:
+def _create_random_degree_matched_set(gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, named_sources:list, min_group_size:int, max_group_size:int) -> dict:
     """
     Creates a random set of genes that are degree-matched to the input gene set.
 
@@ -743,6 +602,9 @@ def _create_random_degree_matched_set(gene_sets:dict, string_net_all_genes:list,
     - random_sets (dict): A dictionary where the keys are gene set names and the values are lists of randomly selected genes that are degree-matched to the input gene set.
     """
     random_sets = {}
+    # Filter for your background set of genes
+    degree_df = string_net_degree_df.copy()
+    degree_df = degree_df[degree_df.index.isin(background_genes)]
     for k, v in gene_sets.items():
         unique_mapped_genes = v
         # filter for genes mapped to STRING
@@ -761,24 +623,22 @@ def _create_random_degree_matched_set(gene_sets:dict, string_net_all_genes:list,
             reactome_genes = _load_reactome_genes(min_group_size, max_group_size)
             rng = np.random.default_rng(seed = set_num * 42)
             for k1, v1 in unique_mapped_genes_degree_dict.items():
-                degree_df = string_net_degree_df.copy()
-                degree_df = degree_df[degree_df['degree_rounded']==k1]
-                degree_df = degree_df[degree_df.index.isin(reactome_genes)]
-                degree_matched_genes = degree_df.index.tolist()
+                degree_df_matched = degree_df[degree_df['degree_rounded']==k1]
+                degree_df_matched = degree_df_matched[degree_df_matched.index.isin(reactome_genes)]
+                degree_matched_genes = degree_df_matched.index.tolist()
                 x = rng.choice(degree_matched_genes, v1, replace=False).tolist()
                 random_genes.extend(x)
         else:
             rng = np.random.default_rng(seed = set_num * 42)
             for k1, v1 in unique_mapped_genes_degree_dict.items():
-                degree_df = string_net_degree_df.copy()
-                degree_df = degree_df[degree_df['degree_rounded']==k1]
-                degree_matched_genes = degree_df.index.tolist()
+                degree_df_matched = degree_df[degree_df['degree_rounded']==k1]
+                degree_matched_genes = degree_df_matched.index.tolist()
                 x = rng.choice(degree_matched_genes, v1, replace=False).tolist()
                 random_genes.extend(x)
         random_sets[k] = random_genes
     return random_sets
 
-def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -> (list, dict):
+def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -> (list, dict): # type: ignore
     """
     Runs Markov Clustering Algorithm (MCL) on a given network and returns the clusters and their constituent genes.
 
@@ -807,7 +667,7 @@ def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -
 
     return clusters, clusters_dict
 
-def _sort_cluster_dict(cluster_dict:dict, sources:dict) -> (dict, pd.DataFrame):
+def _sort_cluster_dict(cluster_dict:dict, sources:dict) -> (dict, pd.DataFrame): # type: ignore
     """
     Sorts a dictionary of gene clusters by the number of genes in each cluster, and returns a new dictionary
     with the same clusters, but with new names based on their size (e.g. "cluster_0", "cluster_1", etc.).
@@ -841,7 +701,7 @@ def _sort_cluster_dict(cluster_dict:dict, sources:dict) -> (dict, pd.DataFrame):
     sorted_cluster_df['source'] = sorted_cluster_df['gene'].map(sources)
     return sorted_cluster_dict, sorted_cluster_df
 
-def _multiprocessing_mcl(gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list) -> list:
+def _multiprocessing_mcl(gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list) -> list:
     """
     Runs MCL analysis on a given set of gene sets and returns the functional enrichment of the resulting clusters.
 
@@ -863,6 +723,7 @@ def _multiprocessing_mcl(gene_sets:dict, string_net_all_genes:list, string_net_d
     random_sets_clusters = []
     random_sets = _create_random_degree_matched_set(
         gene_sets,
+        background_genes,
         string_net_all_genes,
         string_net_degree_df,
         source_names,
@@ -903,17 +764,19 @@ def _multiprocessing_randomization(arg:tuple) -> list:
     - out_lst (list): A list of output values.
     """
     gene_sets = arg[0]
-    string_net_all_genes = arg[1]
-    string_net_degree_df = arg[2]
-    source_names = arg[3]
-    min_group_size = arg[4]
-    max_group_size = arg[5]
-    string_net = arg[6]
-    true_inflation_parameter = arg[7]
-    functional_groups = arg[8]
-    functional_groups_names = arg[9]
+    background_genes = arg[1]
+    string_net_all_genes = arg[2]
+    string_net_degree_df = arg[3]
+    source_names = arg[4]
+    min_group_size = arg[5]
+    max_group_size = arg[6]
+    string_net = arg[7]
+    true_inflation_parameter = arg[8]
+    functional_groups = arg[9]
+    functional_groups_names = arg[10]
     out_lst = _multiprocessing_mcl(
         gene_sets,
+        background_genes,
         string_net_all_genes,
         string_net_degree_df,
         source_names,
@@ -926,7 +789,7 @@ def _multiprocessing_randomization(arg:tuple) -> list:
     )
     return out_lst
 
-def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list, cores:int) -> list:
+def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, background_genes:list, string_net_all_genes:list, string_net_degree_df:pd.DataFrame, source_names:list, min_group_size:int, max_group_size:int, string_net:pd.DataFrame, true_inflation_parameter:float, functional_groups:list, functional_groups_names:list, cores:int) -> list:
     """
     This function performs multiprocessing randomization of gene sets.
 
@@ -949,6 +812,7 @@ def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, string_
     """
     args_ = tuple(zip(
         [gene_sets] * random_iter,
+        [background_genes] * random_iter,
         [string_net_all_genes] * random_iter,
         [string_net_degree_df] * random_iter,
         [source_names] * random_iter,
@@ -964,7 +828,7 @@ def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, string_
     pool.join()
     return output
 
-def _get_top_pval_random_clusters(random_sets_clusters_enrichment:list) -> (list, list, list, list, list, list):
+def _get_top_pval_random_clusters(random_sets_clusters_enrichment:list) -> (list, list, list, list, list, list): # type: ignore
     """
     Given a list of nested dictionaries containing random cluster enrichment data, returns the top p-value for each
     pathway across all iterations for each biological group type.
@@ -1107,7 +971,7 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
                 continue
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict):
+def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
     """
     Perform functional clustering analysis on a set of genes.
 
@@ -1142,6 +1006,12 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         pathways_min_group_size,
         pathways_max_group_size
     )
+    # Determine background gene set
+    if custom_background == 'string':
+        background_genes = string_net_all_genes
+    else:
+        background_dict, background_name = _define_background_list(custom_background)
+        background_genes = background_dict[background_name]
     # true gene sets and set of all input genes
     gene_sets, source_names = _clean_query([genes_1, genes_2, genes_3, genes_4, genes_5], source_names)
     gene_sources, input_genes = _get_gene_sources(gene_sets)
@@ -1151,11 +1021,11 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
     true_cluster_dict, true_cluster_df = _sort_cluster_dict(true_cluster_dict, gene_sources)
     # Perform True Cluster Functional Enrichment
     true_clusters_enrichment_df_dict = _cluster_functional_enrichment(
-        functional_groups, functional_groups_names, true_cluster_dict, string_net_all_genes
+        functional_groups, functional_groups_names, true_cluster_dict, background_genes
     )
     # Perform Random Cluster Functional Enrichment
     randomization_output = _pool_multiprocessing_randomization(
-        random_iter, gene_sets, string_net_all_genes, string_net_degree_df, source_names, pathways_min_group_size, pathways_max_group_size, string_net, true_inflation_parameter, functional_groups, functional_groups_names, cores
+        random_iter, gene_sets, background_genes, string_net_all_genes, string_net_degree_df, source_names, pathways_min_group_size, pathways_max_group_size, string_net, true_inflation_parameter, functional_groups, functional_groups_names, cores
     )
     random_sets_clusters = []
     random_sets_clusters_enrichment = []
@@ -1175,17 +1045,19 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         pval_merged_tuple_set
     )
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Functional_Clustering/')
+        os.makedirs(new_savepath, exist_ok=True)
         # Save true gene network
-        true_gene_network.to_csv(savepath + 'GeneSetNetwork.csv', index = False)
+        true_gene_network.to_csv(new_savepath + 'GeneSetNetwork.csv', index = False)
         # save true_cluster_dict
-        true_cluster_df.to_csv(savepath + 'TrueClusters.csv', index = False)
+        true_cluster_df.to_csv(new_savepath + 'TrueClusters.csv', index = False)
         # save random_sets
-        with open(savepath + 'RandomSets_Clusters.txt', 'w') as f:
+        with open(new_savepath + 'RandomSets_Clusters.txt', 'w') as f:
             for item in random_sets_clusters:
                 f.write("%s\n" % item)
         # Save cluster enrichment dataframes - true_clusters_enrichment_df_dict
-        enrich_save_path = savepath + 'Enrichment/'
+        enrich_save_path = new_savepath + 'Enrichment/'
         if not os.path.exists(enrich_save_path):
             os.makedirs(enrich_save_path)
         for cluster_num, sub_dict in true_clusters_enrichment_df_dict.items():
@@ -1535,8 +1407,10 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     # Calcualte control - p-value multiplication
     df = _p_multiply(df)
     if savepath:
-        os.makedirs(savepath, exist_ok=True)
-        df.to_csv(savepath + "StatisticalCombination.csv", index = False)
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'Statistical_Consensus/')
+        os.makedirs(new_savepath, exist_ok=True)
+        df.to_csv(new_savepath + "StatisticalCombination.csv", index = False)
 
     return df
 #endregion

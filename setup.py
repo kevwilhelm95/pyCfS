@@ -3,7 +3,7 @@ Setup script for pyCfS, a package for gene list validation experiments
 """
 import setuptools
 
-VERSION = '0.0.7'
+VERSION = '0.0.8'
 
 setuptools.setup(
     name = 'pyCfS',
@@ -20,12 +20,14 @@ setuptools.setup(
         'venn', 'scipy', 'networkx',
         'biopython', 'upsetplot', 'markov_clustering',
         'statsmodels', 'pyarrow', 'adjustText',
-        'seaborn', 'tqdm'
+        'seaborn', 'tqdm', 'collections', 'scipy', 'sklearn'
     ],
     classifiers = [
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8'
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10'
     ],
     include_package_data = True,
     package_data = {'':[
