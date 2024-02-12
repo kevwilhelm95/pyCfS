@@ -17,8 +17,9 @@ pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
 #### Examples
 See "example.ipynb" for help
 
-#### Parallelization notes
-Parallelized functions require the user to run function under blocking guard (i.e. if `__name__ == "__main__"`:)
+#### Notes
+Parallelized functions require the user to run function under blocking guard (i.e. if `__name__ == "__main__"`:) <br>
+Save path should be a parent directory (e.g. /path/to/folder) as the functions will create experiment-specific folders automatically (e.g. /path/to/folder/experiment)
 
 #### Available Methods
 - `pyCFS.Combine`
@@ -27,6 +28,7 @@ Parallelized functions require the user to run function under blocking guard (i.
     - `statistical_combination`
 - `pyCFS.GoldStandards`
     - `goldstandard_overlap`
+    - `ndiffusion`
     - `interconnectivity`
     - `gwas_catalog_colocalization`
     - `pubmed_comentions`
@@ -58,10 +60,9 @@ Combines multiple lists of genes, counts occurrences of each gene, and tracks th
     #### Returns:
 - `pd.DataFrame`: A dataframe with columns 'gene', 'occurrences', and 'lists', detailing each unique gene, the number of its occurrences, and the lists it appeared in.
 - `Image`: Upset plot showing overlap between input genelists.
-#### Parallelized:
-No
 
 ### `functional_clustering()`
+`Parallelized` <br>
 Clusters genes from multiple sources in STRING network 
 #### Parameters:
 - `genes_1` (list): list of genes
@@ -70,9 +71,10 @@ Clusters genes from multiple sources in STRING network
     - `genes_3` (list): Additional list of genes.
     - `genes_4` (list): Additional list of genes.
     - `genes_5` (list): Additional list of genes.
-    - `source_names` (list): Gene list names.  
+    - `source_names` (list): Gene list names.
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
+    - `custom_background` (str OR list): Background gene set for optimal inflation parameter and pathway enrichment. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
     - `random_iter` (int): # of random iterations to perform (Default = 100).
     - `inflation` (float): Set inflation parameter. If not set, algorithm determines optimal inflation from 1.5-3.0.
     - `pathways_min_group_size` (int): Minimum group size for pathway enrichment (Default = 5).
@@ -83,8 +85,7 @@ Clusters genes from multiple sources in STRING network
 - `pd.DataFrame` : Pairwide edges from true connection network. Formatted as STRING network.
 - `pd.DataFrame` : Table of query genes, their true clusters, and gene sources.
 - `dict` : Dictionary of dataframes by cluster contained pathway enrichment results.
-#### Parallelized:
-Yes
+
 
 ### `statistical_combination()`
 Statistical p-value combination methods
@@ -100,8 +101,9 @@ Statistical p-value combination methods
     - `savepath` (str): File path. No files saved if not provided.
 #### Returns:
 - `pd.DataFrame` : Dataframe containing genes, their original p-values, and p-value combinations for Cauchy, MinP, CMC, MCM, and multiplied p-values.
-#### Parallelized:
-No
+
+
+
 
 
 ## pyCFS.GoldStandards
@@ -111,6 +113,7 @@ Assess the overlap with a reference gene set.
 - `query` (list): List of query genes
 - `goldstandard` (list): List of gold standard genes
 - **Optional**:
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
     - `plot_query_color` (str): Color of query venn diagram (Default = red).
     - `plot_goldstandard_color` (str): Color of goldstandard venn diagram (Default = gray)
     - `plot_show_gene_pval` (bool) : Default = True. Toggle showing the overlapping gene names and p-value on plot image
@@ -121,12 +124,31 @@ Assess the overlap with a reference gene set.
 - `list` : List of overlapping genes
 - `float` : P-value of hypergeometric overlap.
 - `Image` : Venn diagram of overlap
-#### Parallelized:
-No
+
 
 ### `ndiffusion()`
+`Parallelized` <br>
+Assess the broad network connectivity between two gene sets in the STRING network. (Can take approx. 40 minutes for 'all' edge confidence with 5 cores and 100 random iterations)
+#### Parameters:
+- `set_1` (list): List of genes
+- `set_2` (list): List of genes
+- **Optional**:
+    - `set_1_name` (str): Name of set 1 for plotting & saving (Default = Set_1)
+    - `set_2_name` (str): Name of set 2 for plotting & saving (Default = Set_2)
+    - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
+    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'all').
+    - `n_iter` (int): # of randomizations to perform (Default = 100).
+    - `cores` (int): # of cores for parallelization (Default = 1).
+    - `savepath` (str): Path for saving.
+#### Returns:
+- `Image`: AUROC plot for show_1 (Most often "from Set1 Exclusive to Set2")
+- `float`: Z-score for show_1 AUROC
+- `Image`: AUROC plot for show_2 (Most often "from Set2 Exclusive to Set1")
+- `float`: Z-score for show_2 AUROC
+
 
 ### `interconnectivity()`
+`Parallelized` <br>
 Assess the level of direct connections with reference gene set in the STRING network.
 #### Parameters:
 - `set_1` (list): List of genes.
@@ -137,6 +159,7 @@ Assess the level of direct connections with reference gene set in the STRING net
     - `set_5` (list): List of genes.
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
+    - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
     - `num_iterations` (int): # of iterations for background connections (Default = 250). 
     - `cores` (int): For parallelization (Default = 1).
     - `plot_fontface` (str): (Default = Avenir).
@@ -150,10 +173,10 @@ Assess the level of direct connections with reference gene set in the STRING net
 - `list` : List of random connections.
 - `pd.DataFrame` : Unique gene network.
 - `dict` : Gene sources
-#### Parallelized:
-Yes
+
 
 ### `gwas_catalog_colocalization()`
+`Parallelized` <br>
 Assess the enrichment for co-localization within X Mbp of genome-wide significant loci.
 #### Parameters:
 - `query` (list): List of genes:
@@ -162,22 +185,23 @@ Assess the enrichment for co-localization within X Mbp of genome-wide significan
     - `gwas_summary_path` (str): Path to GWAS Catalog downloaded summary statistics. If used, API is not called.
     - `gwas_p_thresh` (float): Filter for genome-wide significance to compare to (Default = 5e-8).
     - `distance_mbp` (float): Distance threshold for colocalization in Mbp (Default = 0.5 Mbp).
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
     - `cores` (int): # of cores for parallelization (Default = 1).
     - `savepath` (str): Path to save. If not used, no files are saved.
     - `save_summary_statistics` (bool): True to save downloaded summary stats if savepath is also defined.
 #### Returns:
 - `pd.DataFrame` : Two-column table of SNPs that colocalize with query gene.
 - `float` : Fisher's exact test p-value
-#### Parallelized:
-Yes
+
 
 ### `pubmed_comentions()`
+`Parallelized` <br>
 Assess the enrichment for co-mentions with specific keywords in PubMed.
 #### Parameters:
 - `query` (list): List of genes.
 - `keyword` (str): Keyword to search co-mentions for.
 - **Optional**:
-    - `background_genes` (list): List of genes for background enrichment. Default = 19,894 human genes from ENSEMBL-lit_GRCh38.v94.
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
     - `email` (str): Email of a PubMed account. (Default = my email).
     - `api_key` (str): API key of PubMed account. (Default = my key).
     - `enrichment_trials` (int): # of randomization trials (Default = 100).
@@ -193,18 +217,19 @@ Assess the enrichment for co-mentions with specific keywords in PubMed.
 - `pd.DataFrame` : Dataframe of genes, co-mention counts, and PMIDs.
 - `dict` : Keys = enrichment_cutoffs values; Values = (# of query genes, z score).
 - `dict` : Keys = enrichment_cutoffs values; Values = Image of enrichment distribution.
-#### Parallelization:
-Yes
+
+
 
 
 
 ## pyCFS.Clinical
 ### `mouse_phenotype_enrichment()`
+`Parallelized` <br>
 Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data parsed and downloaded from OpenTargets).
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
-    - `background` (str): Background gene set. Options include 'ensembl', 'Reactomes' (Default = ensembl).
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
     - `random_iter` (int): Iterations for background run (Default = 5000).
     - `plot_sig_color` (str): Color for sig. phenotypes in strip plot (Default = red).
     - `plot_q_threshold` (float): Significance threshold for strip plot (Default = 0.05).
@@ -216,15 +241,15 @@ Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data 
 - `pd.DataFrame` : Enrichment summary.
 - `Image` : Strip plot of enrichment.
 - `Image` : Histogram of FDR values.
-#### Parallelized:
-Yes
+
 
 ### `protein_family_enrichment()`
+`Parallelized` <br>
 Assess enrichment of protein family type from OpenTargets data.
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
-    - `background` (str): Background gene set. Options include 'ensembl', 'Reactomes' (Default = ensembl).
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
     - `level` (list): Levels to test. Options include "all", "level1", "level2", "level3", "level4", "level5" (Default = ["all"])
     - `random_iter` (int): Number of background iterations (Default = 5000).
     - `plot_q_cut` (float): Plot significance threshold (Default = 0.05).
@@ -236,8 +261,7 @@ Assess enrichment of protein family type from OpenTargets data.
 #### Returns:
 - `pd.DataFrame` : Enrichment dataframe for protein families.
 - `Image` : Horizontal strip plot of enrichment.
-#### Parallelized:
-Yes
+
 
 ### `tissue_expression_enrichment()`
 
@@ -247,7 +271,7 @@ Assess enrichment for cancer-dependent genes.
 - `query` (list) : List of genes
 - `cancer_type` (list) : List of cancer cell types (Available cancer cell types can be found at - https://depmap.org/portal/ > Tools > Cell Line Selector > Create custom list (Broad types = Lineage, Most specific = Lineage Sub-subtype))
 - **Optional**:
-    - `control_genes` (list) : List of genes to compare against. If not defined, default comparison is all DepMap tested genes less query genes.
+    - `custom_background` (str OR list): List of genes to compare against. Options include 'depmap', 'ensembl', 'reactome' or user defined list (Default = 'depmap').
     - `plot_fontface` (str) : Defualt = Avenir.
     - `plot_fontsize` (int) : Default = 14.
     - `plot_query_color` (str) : Default = red.
@@ -256,8 +280,7 @@ Assess enrichment for cancer-dependent genes.
 #### Returns
 - `float` : P-value of Mann Whitney U test
 - `Image` : Histogram of Chronos DepMap scores for query and background genes
-#### Parallelized
-No
+
 
 ### `drug_gene_interactions()`
 Pulls drug-gene interactions in order to find potential repurposable therapies.
@@ -270,5 +293,3 @@ Pulls drug-gene interactions in order to find potential repurposable therapies.
     - `savepath` (str) : File path
 #### Returns:
  - `dict` : Resource name and drug interactors (e.g. {'DGIdb': pd.DataFrame})
-#### Parallelized
-No

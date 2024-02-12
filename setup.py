@@ -20,12 +20,14 @@ setuptools.setup(
         'venn', 'scipy', 'networkx',
         'biopython', 'upsetplot', 'markov_clustering',
         'statsmodels', 'pyarrow', 'adjustText',
-        'seaborn', 'tqdm'
+        'seaborn', 'tqdm', 'collections', 'scipy', 'sklearn'
     ],
     classifiers = [
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8'
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10'
     ],
     include_package_data = True,
     package_data = {'':[

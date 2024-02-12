@@ -119,7 +119,7 @@ def _upset_plot(result_dict:dict, fontsize:int, fontface:str) -> Image:
 
     return image
 
-def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image):
+def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False, genes_4:list = False, genes_5:list = False, genes_6:list = False, gene_dict:dict = False, list_names:Any = False, plot_fontface:str='Avenir', plot_fontsize:int = 14, savepath: Any = False) -> (pd.DataFrame, Image): # type: ignore
     """
     Combines multiple lists of genes, excluding NaNs, counts occurrences of each gene, and tracks the lists they came from.
 
@@ -175,7 +175,7 @@ def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False,
 
 
 #region Functional Clustering
-def _load_clean_network(evidences:list, edge_confidence:str) -> (pd.DataFrame, list, pd.DataFrame):
+def _load_clean_network(evidences:list, edge_confidence:str) -> (pd.DataFrame, list, pd.DataFrame): # type: ignore
     """
     Load and customize STRINGv11 network for analysis.
 
@@ -231,7 +231,7 @@ def _get_reactomes(min_size: int, max_size: int) -> dict:
     reactome_dict = dict(zip(reactomes_names, reactomes_genes))
     return reactome_dict
 
-def _get_go_terms(min_size: int, max_size: int) -> (dict, dict, dict):
+def _get_go_terms(min_size: int, max_size: int) -> (dict, dict, dict): # type: ignore
     """
     Returns three dictionaries containing Gene Ontology (GO) terms for biological processes, cellular components, and molecular functions.
 
@@ -303,7 +303,7 @@ def _get_wikipathways(min_size:int, max_size:int) -> dict:
     wiki_dict = dict(zip(wiki_names, wiki_genes))
     return wiki_dict
 
-def _get_functional_sets(min_size: int, max_size: int) -> (list, list):
+def _get_functional_sets(min_size: int, max_size: int) -> (list, list): # type: ignore
     """
     Returns a list of functional groups and their names based on the minimum and maximum size of the groups.
 
@@ -327,7 +327,7 @@ def _get_functional_sets(min_size: int, max_size: int) -> (list, list):
     functional_groups_names = ['reactomes', 'go_bp', 'go_cc', 'go_mf', 'kegg','wiki']
     return functional_groups, functional_groups_names
 
-def _clean_query(gene_list:list, source_names:Any) -> (dict, list):
+def _clean_query(gene_list:list, source_names:Any) -> (dict, list): # type: ignore
     """
     Given a list of genes, creates a dictionary where each key is a set name and each value is a gene from the input list.
 
@@ -347,7 +347,7 @@ def _clean_query(gene_list:list, source_names:Any) -> (dict, list):
         gene_dict[sets[i]] = gene_list[i]
     return gene_dict, sets
 
-def _get_gene_sources(set_dict: dict) -> (dict, list):
+def _get_gene_sources(set_dict: dict) -> (dict, list): # type: ignore
     """
     Given a dictionary of sets, where each set contains proteins, returns a dictionary where the keys are proteins and the values are lists of sets that contain the protein.
     Also returns a list of all proteins in the dictionary.
@@ -429,7 +429,7 @@ def _get_input_gene_network(gene_lst: list, network: pd.DataFrame) -> pd.DataFra
 
     return n_df_final
 
-def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Graph, dict):
+def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Graph, dict): # type: ignore
     """
     Runs the MCL algorithm on a given network and returns the clusters, the inflation parameter used, the graph, and a dictionary of clusters.
 
@@ -638,7 +638,7 @@ def _create_random_degree_matched_set(gene_sets:dict, background_genes:list, str
         random_sets[k] = random_genes
     return random_sets
 
-def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -> (list, dict):
+def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -> (list, dict): # type: ignore
     """
     Runs Markov Clustering Algorithm (MCL) on a given network and returns the clusters and their constituent genes.
 
@@ -667,7 +667,7 @@ def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -
 
     return clusters, clusters_dict
 
-def _sort_cluster_dict(cluster_dict:dict, sources:dict) -> (dict, pd.DataFrame):
+def _sort_cluster_dict(cluster_dict:dict, sources:dict) -> (dict, pd.DataFrame): # type: ignore
     """
     Sorts a dictionary of gene clusters by the number of genes in each cluster, and returns a new dictionary
     with the same clusters, but with new names based on their size (e.g. "cluster_0", "cluster_1", etc.).
@@ -828,7 +828,7 @@ def _pool_multiprocessing_randomization(random_iter:int, gene_sets:dict, backgro
     pool.join()
     return output
 
-def _get_top_pval_random_clusters(random_sets_clusters_enrichment:list) -> (list, list, list, list, list, list):
+def _get_top_pval_random_clusters(random_sets_clusters_enrichment:list) -> (list, list, list, list, list, list): # type: ignore
     """
     Given a list of nested dictionaries containing random cluster enrichment data, returns the top p-value for each
     pathway across all iterations for each biological group type.
@@ -971,7 +971,7 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
                 continue
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict):
+def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
     """
     Perform functional clustering analysis on a set of genes.
 

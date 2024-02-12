@@ -131,7 +131,7 @@ def _get_open_targets_gene_mapping() -> dict:
 #endregion
 
 #region General cleaning and formatting
-def _define_background_list(background_:Any, just_genes: bool = True) -> (dict, str):
+def _define_background_list(background_:Any, just_genes: bool = True) -> (dict, str): # type: ignore
     """
     Defines the background list based on the input background parameter.
 
@@ -227,7 +227,7 @@ def _fix_savepath(savepath:str) -> str:
         savepath += "/"
     return savepath
 
-def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict):
+def _get_avg_and_std_random_counts(random_counts_merged:dict) -> (dict, dict): # type: ignore
     """
     Calculates the average and standard deviation of the values in a dictionary of random counts.
 
@@ -379,4 +379,31 @@ def _get_edge_weight(edge_confidence:str) -> float:
     else:
         weight = 0.4
     return weight
+
+def _load_clean_string_network(evidences:list, edge_confidence:str) -> pd.DataFrame:
+    """
+    Load and clean the STRING network based on the provided evidences and edge confidence.
+
+    Parameters:
+    - evidences (list): List of evidence types to consider.
+    - edge_confidence (str): Minimum confidence level for edges.
+
+    Returns:
+    - string_net (pd.DataFrame): Cleaned STRING network.
+    - string_net_genes (list): List of genes present in the cleaned network.
+    """
+    # Load STRING
+    string_net = _load_string()
+    # Parse the evidences and edge confidence
+    evidence_lst = _get_evidence_types(evidences)
+    string_net = _select_evidences(evidence_lst, string_net)
+    string_net = _get_combined_score(string_net)
+
+    edge_weight = _get_edge_weight(edge_confidence)
+    string_net = string_net[string_net['score'] >= edge_weight]
+
+    # Get all genes
+    string_net_genes = list(set(string_net['node1'].unique().tolist() + string_net['node2'].unique().tolist()))
+
+    return string_net, string_net_genes
 #endregion
