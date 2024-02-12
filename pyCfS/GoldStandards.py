@@ -1119,14 +1119,8 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
     gp1_only_dict, gp2_only_dict, overlap_dict, other_dict =_parse_gene_input(
         set_1, set_2, graph_node, graph_node_index, node_degree
     )
-    print(f"gp1_only: Orig = {len(gp1_only_dict['orig'])}, Node = {len(gp1_only_dict['node'])}")
-    print(f"gp2_only: Orig = {len(gp2_only_dict['orig'])}, Node = {len(gp2_only_dict['node'])}")
-    print(f"overlap: Orig = {len(overlap_dict['orig'])}, Node = {len(overlap_dict['node'])}")
     degree_nodes = _get_degree_node(g_degree, node_degree, other_dict['node'])
     gp1_all_dict, gp2_all_dict, exclusives_dict = _check_overlap_dict(overlap_dict, gp1_only_dict, gp2_only_dict)
-    print(f"gp1_all: Orig = {len(gp1_all_dict['orig'])}, Node = {len(gp1_all_dict['node'])}")
-    print(f"gp2_all: Orig = {len(gp2_all_dict['orig'])}, Node = {len(gp2_all_dict['node'])}")
-    print(f"exclusives: Orig = {len(exclusives_dict['orig'])}, Node = {len(exclusives_dict['node'])}")
 
     # Run diffusion
     # If there is no overlap, no genes specific to set_1, and no genes specific to set_2
@@ -1136,14 +1130,14 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
             gp1_only_dict, gp2_all_dict, group1_name+'Excl', group2_name, show = '__SHOW_1_',
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_1_plot = r_gp1o_gp2[2][0]
+        show_1_plot = r_gp1o_gp2[1][0]
         show_1_z = r_gp1o_gp2[0][0]
         # From group 2 exclusive to group 1 all:
         r_gp2o_gp1 = _get_results(
             gp2_only_dict, gp1_all_dict, group2_name+'Excl', group1_name, show = '__SHOW_2_',
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_2_plot = r_gp2o_gp1[2][0]
+        show_2_plot = r_gp2o_gp1[1][0]
         show_2_z = r_gp2o_gp1[0][0]
         # From group 1 exclusive to group 2 exclusive:
         r_gp1o_gp2o = _get_results(
@@ -1178,13 +1172,13 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
         r_gp1o_overlap = _get_results(
             gp1_only_dict, overlap_dict, group1_name+'Excl', 'Overlap or'+group2_name, degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_1_plot = r_gp1o_overlap[2][0]
+        show_1_plot = r_gp1o_overlap[1][0]
         show_1_z = r_gp1o_overlap[0][0]
         # From overlap/group 2 to group 1 exclusive
         r_overlap_gp1o = _get_results(
             overlap_dict, gp1_only_dict,'Overlap or'+group2_name, group1_name+'Excl', degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_2_plot = r_overlap_gp1o[2][0]
+        show_2_plot = r_overlap_gp1o[1][0]
         show_2_z = r_overlap_gp1o[0][0]
         # Record results to not write
         r_gp1o_gp2 = False
@@ -1202,13 +1196,13 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
         r_gp2o_overlap = _get_results(
             gp2_only_dict, overlap_dict, group2_name+'Excl', 'Overlap or '+group1_name, degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_1_plot = r_gp2o_overlap[2][0]
+        show_1_plot = r_gp2o_overlap[1][0]
         show_1_z = r_gp2o_overlap[0][0]
         # From overlap/group 1 to group 2 exclusive
         r_overlap_gp2o = _get_results(
             overlap_dict, gp2_only_dict, 'Overlap or'+group1_name, group2_name+'Excl', degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_2_plot = r_overlap_gp2o[2][0]
+        show_2_plot = r_overlap_gp2o[1][0]
         show_2_z = r_overlap_gp2o[0][0]
         # Record what to save
         r_gp1o_gp2 = False
@@ -1227,14 +1221,14 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
             gp1_only_dict, gp2_only_dict, group1_name, group2_name, show = '__SHOW_1_',
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_1_plot = r_gp1o_gp2o[2][0]
+        show_1_plot = r_gp1o_gp2o[1][0]
         show_1_z = r_gp1o_gp2o[0][0]
         # From group 2 to group 1:
         r_gp2o_gp1o = _get_results(
             gp2_only_dict, gp1_only_dict, group2_name, group1_name, show = '__SHOW_2_',
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
-        show_2_plot = r_gp2o_gp1o[2][0]
+        show_2_plot = r_gp2o_gp1o[1][0]
         show_2_z = r_gp2o_gp1o[0][0]
         # Record what to save
         r_gp1o_gp2 = False
@@ -1575,9 +1569,7 @@ def _create_random_degree_matched_set(unique_gene_sets:dict, background_genes:li
 
     # Get full degree dataframe filtered
     degree_df = string_net_degree_df.copy()
-    print("degree_df", degree_df.shape)
     degree_df = degree_df[degree_df.index.isin(background_genes)]
-    print("background_degree_df", degree_df.shape)
 
     # Loop through unique gene sets
     for k, v in unique_gene_sets.items():
