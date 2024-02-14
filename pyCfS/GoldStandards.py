@@ -19,6 +19,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn2
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
 import seaborn as sns
 from PIL import Image
 from venn import venn
@@ -32,7 +34,7 @@ import networkx as nx
 from Bio import Entrez
 import concurrent.futures
 from itertools import repeat
-from .utils import _hypergeo_overlap, _format_scientific, _fix_savepath, _define_background_list, _clean_genelists, _load_grch38_background,_load_clean_string_network
+from .utils import _hypergeo_overlap, _format_scientific, _fix_savepath, _define_background_list, _clean_genelists, _load_grch38_background,_load_clean_string_network, _get_edge_weight
 
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -189,6 +191,266 @@ def goldstandard_overlap(query: list, goldstandard:list, custom_background:Any =
             f.write(f"P-value: {pval}")
 
     return overlapping_genes, pval, image
+#endregion
+
+
+
+#region PPI Significance
+def _base_string_api() -> str:
+    """
+    Returns the base URL for the STRING-DB API.
+
+    Returns:
+        str: The base URL for the STRING-DB API.
+    """
+    return "https://string-db.org/api/"
+
+def _format_species(species:int) -> str:
+    """
+    Formats the species parameter for the API request.
+
+    Args:
+        species (int): The species ID.
+
+    Returns:
+        str: The formatted species parameter for the API request.
+    """
+    return f"&species={species}"
+
+def _format_genes(genes:list) -> str:
+    """
+    Formats a list of genes into a string.
+
+    Args:
+        genes (list): A list of genes.
+
+    Returns:
+        str: A formatted string containing the gene identifiers.
+    """
+    genes = "%0d".join(genes)
+    return f"identifiers={genes}"
+
+def _format_method(method: str) -> str:
+    """
+    Formats the given method string into the corresponding API endpoint.
+
+    Args:
+        method (str): The method to be formatted.
+
+    Returns:
+        str: The formatted API endpoint.
+
+    Raises:
+        ValueError: If the method is not one of the valid options.
+    """
+    if method == 'network_image':
+        return "highres_image/network?"
+    elif method == 'network_interactions':
+        return "tsv/network?"
+    elif method == 'ppi_enrichment':
+        return "tsv/ppi_enrichment?"
+    elif method == 'functional_enrichment':
+        return "tsv/enrichment?"
+    elif method == 'version':
+        return "tsv/version?"
+    else:
+        raise ValueError("Invalid method - Please choose 'network_image', 'network_interactions', 'network_enrichment', 'functional_enrichment', or 'version'")
+
+def _format_score_threshold(score: float) -> str:
+    """
+    Formats the score threshold for the required score parameter.
+
+    Args:
+        score (float): The score threshold to be formatted.
+
+    Returns:
+        str: The formatted score threshold as a query parameter for the required score.
+
+    """
+    score *= 1000
+    return f"&required_score={score}"
+
+def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontface:str) -> dict:
+    """
+    Plot enrichment analysis results.
+
+    Parameters:
+    enrichment_df (pd.DataFrame): The DataFrame containing the enrichment analysis results.
+    plot_fontsize (int): The font size of the plot.
+    plot_fontface (str): The font face of the plot.
+
+    Returns:
+    dict: A dictionary containing the generated enrichment plots.
+    """
+    # Clean the enrichment dataframe
+    enrichment_df = enrichment_df[enrichment_df['fdr'] <= 0.05]
+    enrichment_df['-log10(FDR)'] = -1 * enrichment_df['fdr'].apply(np.log10)
+    enrichment_df = enrichment_df.sort_values(by='-log10(FDR)', ascending=False)
+    enrichment_df['Enrichment Term'] = enrichment_df['term'] + "~" + enrichment_df['description']
+    enrichment_df = enrichment_df.rename(columns = {'number_of_genes':'Gene Count'})
+    # Set up saving parameters
+    categories = enrichment_df.category.unique().tolist()
+    enrichment_plots = {}
+    # Set plotting parameters
+    plt.rcParams.update({'font.size': plot_fontsize,
+                        'font.family': plot_fontface})
+    def _calculate_plot_height(df:pd.DataFrame, plot_fontsize:int) -> float:
+        """
+        Calculate the height of a plot based on the number of rows in a DataFrame and the font size of the plot.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing the data for the plot.
+        plot_fontsize (int): The font size of the plot.
+
+        Returns:
+        float: The calculated height of the plot.
+        """
+        plot_height = (df.shape[0] * plot_fontsize) / 50
+        if plot_height < 6:
+            return 6.0
+        else:
+            return plot_height
+    def _calculate_plot_width(df: pd.DataFrame, plot_fontsize: int) -> float:
+        """
+        Calculate the plot width based on the maximum term length in the DataFrame.
+
+        Args:
+            df (pd.DataFrame): The DataFrame containing the enrichment terms.
+            plot_fontsize (int): The font size used in the plot.
+
+        Returns:
+            float: The calculated plot width.
+        """
+        max_term_length = df['Enrichment Term'].str.len().max()
+        return (max_term_length * plot_fontsize) / 61
+    # Create plots
+    for category in categories:
+        sub_df = enrichment_df[enrichment_df.category == category]
+        # Create 'Gene Count' color map
+        norm = Normalize(vmin=sub_df["Gene Count"].min(), vmax=sub_df["Gene Count"].max())
+        sm = ScalarMappable(cmap="RdBu_r", norm=norm)
+        sm.set_array([])
+        # Create bar plot
+        _, ax = plt.subplots(figsize=(_calculate_plot_width(sub_df, plot_fontsize), _calculate_plot_height(sub_df, plot_fontsize)))
+        sns.barplot(
+            x="-log10(FDR)",
+            y="Enrichment Term",
+            data=sub_df,
+            palette="RdBu_r",
+            dodge=False,
+            hue="Gene Count",
+            edgecolor='.2',
+            linewidth=1.5,
+            legend = False
+        )
+        # Add significance line
+        plt.axvline(x=-np.log10(0.05), color="black", linestyle="--", linewidth=2)
+        # Add color bar
+        cbar = plt.colorbar(sm, ax = ax, shrink = 0.5)
+        cbar.set_label('Gene Count', fontsize=plot_fontsize+4)
+
+        #Set labels
+        plt.xlabel("-log10(FDR)", fontsize=plot_fontsize+4)
+        plt.ylabel("Enrichment Term", fontsize=plot_fontsize+4)
+        plt.title(f"{category} Enrichment", fontsize=plot_fontsize+6)
+        plt.tight_layout(pad = 5.0)
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format = 'png', dpi = 300)
+        buffer.seek(0)
+        image = Image.open(buffer)
+        enrichment_plots[category] = image
+        plt.close()
+
+    return enrichment_plots
+
+def _string_api_call(genes:list, method:str, score_threshold:float, species:int) -> bytes:
+    """
+    Makes an API call to retrieve data based on the given parameters.
+
+    Args:
+        genes (list): A list of genes.
+        method (str): The method to be used for the API call.
+        score_threshold (float): The score threshold for the API call.
+        species (int): The species for the API call.
+
+    Returns:
+        bytes: The response content from the API call.
+
+    Raises:
+        ValueError: If the API call returns a non-200 status code.
+    """
+    query = _base_string_api() + \
+        _format_method(method) + \
+        _format_genes(genes) + \
+        _format_species(species=species) + \
+        _format_score_threshold(score = score_threshold)
+    response = requests.get(query)
+    if response.status_code != 200:
+        raise ValueError("Error: " + response.text)
+    return response.content
+
+def string_enrichment(query:list, edge_confidence:str = 'medium', species:int = 9606, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> tuple:
+    """
+    Performs STRING enrichment analysis for a given list of genes.
+
+    Args:
+        query (list): List of genes for enrichment analysis.
+        score_threshold (str, optional): Score threshold for STRING interactions. Defaults to 'medium'.
+        species (int, optional): Species ID for STRING database. Defaults to 9606.
+        plot_fontsize (int, optional): Font size for enrichment plots. Defaults to 14.
+        plot_fontface (str, optional): Font face for enrichment plots. Defaults to 'Avenir'.
+        savepath (Any, optional): Path to save the results. Defaults to False.
+
+    Returns:
+        tuple: A tuple containing the following:
+            - network_df (pd.DataFrame): DataFrame containing STRING network interactions.
+            - p_value (float): P-value for the enrichment analysis.
+            - network_image (PIL.Image.Image): Image of the STRING network.
+            - functional_enrichment_df (pd.DataFrame): DataFrame containing functional enrichment results.
+            - enrichment_plots (dict): Dictionary of enrichment plots.
+    """
+    # Get the right edge weight value
+    edge_weight = _get_edge_weight(edge_confidence)
+
+    # Get the STRING API version
+    version_b = _string_api_call(genes = query, method = 'version', score_threshold = edge_weight, species = species)
+    version = pd.read_csv(io.StringIO(version_b.decode('utf-8')), sep = '\t')
+    version = version.loc[0, 'string_version']
+    print(f"STRING API version: {version}")
+
+    # Get the STRING interactions network file
+    network = _string_api_call(genes = query, method = 'network_interactions', score_threshold = edge_weight, species = species)
+    network_df = pd.read_csv(io.StringIO(network.decode('utf-8')), sep = '\t')
+
+    # Get the STRING PPI enrichment values
+    enrichment = _string_api_call(genes = query, method = 'ppi_enrichment', score_threshold = edge_weight, species = species)
+    enrichment_df = pd.read_csv(io.StringIO(enrichment.decode('utf-8')), sep = '\t')
+    p_value = enrichment_df['p_value'][0]
+
+    # Get the STRING network
+    network_image = _string_api_call(genes = query, method = 'network_image', score_threshold = edge_weight, species = species)
+    network_image = Image.open(io.BytesIO(network_image))
+
+    # Get the functional enrichment of the gene set
+    functional_enrichment = _string_api_call(genes = query, method = 'functional_enrichment', score_threshold = edge_weight, species = species)
+    functional_enrichment_df = pd.read_csv(io.StringIO(functional_enrichment.decode('utf-8')), sep = '\t')
+    enrichment_plots = _plot_enrichment(functional_enrichment_df, plot_fontsize, plot_fontface)
+
+    if savepath:
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, 'STRING_Enrichment/')
+        os.makedirs(new_savepath, exist_ok=True)
+        network_image.save(new_savepath + "STRING_Network.png", bbox_inches = 'tight', pad_inches = 0.5)
+        enrichment_df.to_csv(new_savepath + "STRING_Enrichment.csv", index = False)
+        functional_enrichment_df.to_csv(new_savepath + "STRING_Functional_Enrichment.csv", index = False)
+        # Save plot images
+        plot_save_path = os.path.join(new_savepath, 'Enrichment_Plots/')
+        os.makedirs(plot_save_path, exist_ok=True)
+        for category in enrichment_plots:
+            enrichment_plots[category].save(plot_save_path +  f"STRING_{category}_Enrichment.png", bbox_inches = 'tight', pad_inches = 0.5)
+
+    return network_df, p_value, network_image,functional_enrichment_df, enrichment_plots
+
 #endregion
 
 

@@ -27,6 +27,7 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
     - `functional_clustering`
     - `statistical_combination`
 - `pyCFS.GoldStandards`
+    - `string_enrichment`
     - `goldstandard_overlap`
     - `ndiffusion`
     - `interconnectivity`
@@ -107,6 +108,24 @@ Statistical p-value combination methods
 
 
 ## pyCFS.GoldStandards
+### `string_enrichment()`
+Assess gene set network connectivity and functional enrichment
+#### Parameters:
+- `query` (list): List of genes
+- **Optional**:
+    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'medium').
+    - `species` (int): Species code from STRING (Default = 9606 (human))
+    - `plot_fontsize` (int): Default = 14.
+    - `plot_fontface` (str): Default = Avenir.
+    - `savepath` (str): Parent path for saving.
+#### Returns:
+- `pd.DataFrame`: Table of network edges 
+- `float` : P-value of PPI enrichment
+- `Image` : STRING network image
+- `pd.DataFrame` : Table of functional enrichment for gene set
+- `Dictionary` : Plots of significant functional enrichment for each pathway set
+
+
 ### `goldstandard_overlap()`
 Assess the overlap with a reference gene set.
 #### Parameters:
