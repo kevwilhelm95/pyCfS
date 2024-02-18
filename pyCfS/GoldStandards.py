@@ -2427,7 +2427,7 @@ def _calculate_fishers_exact(gene_snp_dict:dict, all_gene_dict:dict, final_genes
     _, pval = fisher_exact(np.array([[tp, fp], [fn, tn]]), alternative='greater')
     return tp, fp, fn, tn, pval
 
-def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_path:str = False, gwas_p_thresh: float = 5e-8, distance_mbp:float = 0.5, custom_background:list = [], cores:int = 1, savepath:Any = False, save_summary_statistics:bool = False) -> (pd.DataFrame, float): # type: ignore
+def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_path:str = False, gwas_p_thresh: float = 5e-8, distance_mbp:float = 0.5, custom_background:Any = 'ensembl', cores:int = 1, savepath:Any = False, save_summary_statistics:bool = False) -> (pd.DataFrame, float): # type: ignore
     """
     Performs colocalization analysis between a list of query genes and GWAS catalog SNPs.
 
