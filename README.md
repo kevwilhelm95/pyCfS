@@ -73,6 +73,7 @@ Clusters genes from multiple sources in STRING network
     - `genes_4` (list): Additional list of genes.
     - `genes_5` (list): Additional list of genes.
     - `source_names` (list): Gene list names.
+    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
     - `custom_background` (str OR list): Background gene set for optimal inflation parameter and pathway enrichment. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
@@ -113,6 +114,7 @@ Assess gene set network connectivity and functional enrichment
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
+    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'medium').
     - `species` (int): Species code from STRING (Default = 9606 (human))
     - `plot_fontsize` (int): Default = 14.
@@ -154,8 +156,10 @@ Assess the broad network connectivity between two gene sets in the STRING networ
 - **Optional**:
     - `set_1_name` (str): Name of set 1 for plotting & saving (Default = Set_1)
     - `set_2_name` (str): Name of set 2 for plotting & saving (Default = Set_2)
+    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'all').
+    - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
     - `n_iter` (int): # of randomizations to perform (Default = 100).
     - `cores` (int): # of cores for parallelization (Default = 1).
     - `savepath` (str): Path for saving.
@@ -176,6 +180,7 @@ Assess the level of direct connections with reference gene set in the STRING net
     - `set_3` (list): List of genes.
     - `set_4` (list): List of genes.
     - `set_5` (list): List of genes.
+    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
     - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
