@@ -479,7 +479,7 @@ def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Gr
             mod_values[inflation] = Q
         # identify inflation parameter with highest modularity
         max_q_inflation = 1.0
-        max_q = 1.0
+        max_q = 0
         for k, v in mod_values.items():
             if v > max_q:
                 max_q = v
@@ -951,7 +951,7 @@ def _annotate_percentile_of_score(a:float , b:int) -> float:
     Returns:
         float: The percentile of the score in the list.
     """
-    if np.isnan(b):
+    if np.isnan(b).all():
         print("Warning: All background tests contain no edges. Please decrease edge confidence")
         b = [1.0]
     return percentileofscore(b, a)
@@ -972,18 +972,19 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
     new_dict = {}
     for biological_group, cluster_dict in true_clusters_enrich_df_dict.items():
         for k, v in cluster_dict.items():
-            try:
-                summary_df = v
-                #print(f"1) Summary_df index: {summary_df.index}")
-                summary_df['RandomIterationTopPvals'] = summary_df.index.map(pval_merged_tuple_set[biological_group])
-                #print(f"2) Summary_df index: {summary_df.index}")
-                summary_df['TrueClusterRanking'] = summary_df.apply(lambda x: _annotate_percentile_of_score(x['pval'], x['RandomIterationTopPvals']), axis = 1)
-                #print(f"3) Summary_df index: {summary_df.index}")
-                if k not in new_dict:
-                    new_dict[k] = {}
-                new_dict[k][biological_group] = summary_df
-            except ValueError:
-                continue
+            #try:
+            summary_df = v
+            #print(f"1) Summary_df index: {summary_df.index}")
+            summary_df['RandomIterationTopPvals'] = summary_df.index.map(pval_merged_tuple_set[biological_group])
+            #print(f"2) Summary_df index: {summary_df.index}")
+            summary_df['TrueClusterRanking'] = summary_df.apply(lambda x: _annotate_percentile_of_score(x['pval'], x['RandomIterationTopPvals']), axis = 1)
+            #print(f"3) Summary_df index: {summary_df.index}")
+            if k not in new_dict:
+                new_dict[k] = {}
+            new_dict[k][biological_group] = summary_df
+            #except ValueError:
+                #print(f"Error: {k} has no edges in the network. Please adjust input genes or edge confidence threshold.")
+                #continue
     return new_dict
 
 def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
