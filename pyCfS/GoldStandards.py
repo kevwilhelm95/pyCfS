@@ -13,7 +13,7 @@ from multiprocessing import Pool
 from collections import Counter
 from typing import Any
 import random
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from http.client import IncompleteRead
 import pandas as pd
 import numpy as np
@@ -196,14 +196,22 @@ def goldstandard_overlap(query: list, goldstandard:list, custom_background:Any =
 
 
 #region PPI Significance
-def _base_string_api() -> str:
+def _base_string_api(version:str) -> str:
     """
     Returns the base URL for the STRING-DB API.
 
     Returns:
         str: The base URL for the STRING-DB API.
     """
-    return "https://string-db.org/api/"
+    if version == 'v11.0':
+        return "https://version-11-0.string-db.org/api/"
+    elif version == 'v11.5':
+        return "https://version-11-5.string-db.org/api/"
+    elif version == 'v12.0':
+        return "https://version-12-0.string-db.org/api/"
+        #return "https://string-db.org/api/"
+    else:
+        raise ValueError("Invalid version - Please choose 'v11.0', 'v11.5', or 'v12.0'")
 
 def _format_species(species:int) -> str:
     """
@@ -244,7 +252,7 @@ def _format_method(method: str) -> str:
         ValueError: If the method is not one of the valid options.
     """
     if method == 'network_image':
-        return "highres_image/network?"
+        return "image/network?"
     elif method == 'network_interactions':
         return "tsv/network?"
     elif method == 'ppi_enrichment':
@@ -294,7 +302,7 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
     # Set plotting parameters
     plt.rcParams.update({'font.size': plot_fontsize,
                         'font.family': plot_fontface})
-    def _calculate_plot_height(df:pd.DataFrame, plot_fontsize:int) -> float:
+    def _calculate_plot_height(n_rows:pd.DataFrame, plot_fontsize:int) -> float:
         """
         Calculate the height of a plot based on the number of rows in a DataFrame and the font size of the plot.
 
@@ -305,12 +313,12 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
         Returns:
         float: The calculated height of the plot.
         """
-        plot_height = (df.shape[0] * plot_fontsize) / 50
+        plot_height = (n_rows * plot_fontsize) / 50
         if plot_height < 6:
             return 6.0
         else:
             return plot_height
-    def _calculate_plot_width(df: pd.DataFrame, plot_fontsize: int) -> float:
+    def _calculate_plot_width(enrichment_terms: pd.Series, plot_fontsize: int) -> float:
         """
         Calculate the plot width based on the maximum term length in the DataFrame.
 
@@ -321,8 +329,26 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
         Returns:
             float: The calculated plot width.
         """
-        max_term_length = df['Enrichment Term'].str.len().max()
-        return (max_term_length * plot_fontsize) / 61
+        max_term_length = enrichment_terms.str.len().max()
+        plot_width = (max_term_length * plot_fontsize) / 61
+        return plot_width
+    def _check_viable_plot_size(width: float, height: float, plot_fontsize:int, dpi: int = 300) -> (float, float):
+        """
+        Check if the calculated plot size is viable and adjust if necessary.
+
+        Args:
+            width (float): The calculated plot width.
+            height (float): The calculated plot height.
+
+        Returns:
+            tuple: A tuple containing the adjusted plot width and height.
+        """
+        num_pixels = (width * dpi) * (height * dpi)
+        if num_pixels > 178956970:
+            width /= 2
+            height /= 2
+            plot_fontsize = np.nan
+        return width, height, plot_fontsize
     # Create plots
     for category in categories:
         sub_df = enrichment_df[enrichment_df.category == category]
@@ -331,7 +357,10 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
         sm = ScalarMappable(cmap="RdBu_r", norm=norm)
         sm.set_array([])
         # Create bar plot
-        _, ax = plt.subplots(figsize=(_calculate_plot_width(sub_df, plot_fontsize), _calculate_plot_height(sub_df, plot_fontsize)))
+        plot_height = _calculate_plot_height(sub_df.shape[0], plot_fontsize)
+        plot_width = _calculate_plot_width(sub_df['Enrichment Term'], plot_fontsize)
+        plot_width, plot_height, new_plot_fontsize = _check_viable_plot_size(plot_width, plot_height, plot_fontsize)
+        _, ax = plt.subplots(figsize=(plot_width, plot_height))
         sns.barplot(
             x="-log10(FDR)",
             y="Enrichment Term",
@@ -347,12 +376,12 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
         plt.axvline(x=-np.log10(0.05), color="black", linestyle="--", linewidth=2)
         # Add color bar
         cbar = plt.colorbar(sm, ax = ax, shrink = 0.5)
-        cbar.set_label('Gene Count', fontsize=plot_fontsize+4)
+        cbar.set_label('Gene Count', fontsize=new_plot_fontsize+4)
 
         #Set labels
-        plt.xlabel("-log10(FDR)", fontsize=plot_fontsize+4)
-        plt.ylabel("Enrichment Term", fontsize=plot_fontsize+4)
-        plt.title(f"{category} Enrichment", fontsize=plot_fontsize+6)
+        plt.xlabel("-log10(FDR)", fontsize=new_plot_fontsize+4)
+        plt.ylabel("Enrichment Term", fontsize=new_plot_fontsize+4)
+        plt.title(f"{category} Enrichment", fontsize=new_plot_fontsize+6)
         plt.tight_layout(pad = 5.0)
         buffer = io.BytesIO()
         plt.savefig(buffer, format = 'png', dpi = 300)
@@ -363,7 +392,7 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
 
     return enrichment_plots
 
-def _string_api_call(genes:list, method:str, score_threshold:float, species:int) -> bytes:
+def _string_api_call(version:str, genes:list, method:str, score_threshold:float, species:int) -> bytes:
     """
     Makes an API call to retrieve data based on the given parameters.
 
@@ -379,7 +408,7 @@ def _string_api_call(genes:list, method:str, score_threshold:float, species:int)
     Raises:
         ValueError: If the API call returns a non-200 status code.
     """
-    query = _base_string_api() + \
+    query = _base_string_api(version) + \
         _format_method(method) + \
         _format_genes(genes) + \
         _format_species(species=species) + \
@@ -389,7 +418,7 @@ def _string_api_call(genes:list, method:str, score_threshold:float, species:int)
         raise ValueError("Error: " + response.text)
     return response.content
 
-def string_enrichment(query:list, edge_confidence:str = 'medium', species:int = 9606, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> tuple:
+def string_enrichment(query:list, string_version:str = 'v11.0', edge_confidence:str = 'medium', species:int = 9606, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> tuple:
     """
     Performs STRING enrichment analysis for a given list of genes.
 
@@ -413,26 +442,26 @@ def string_enrichment(query:list, edge_confidence:str = 'medium', species:int = 
     edge_weight = _get_edge_weight(edge_confidence)
 
     # Get the STRING API version
-    version_b = _string_api_call(genes = query, method = 'version', score_threshold = edge_weight, species = species)
+    version_b = _string_api_call(version = string_version, genes = query, method = 'version', score_threshold = edge_weight, species = species)
     version = pd.read_csv(io.StringIO(version_b.decode('utf-8')), sep = '\t')
     version = version.loc[0, 'string_version']
     print(f"STRING API version: {version}")
 
     # Get the STRING interactions network file
-    network = _string_api_call(genes = query, method = 'network_interactions', score_threshold = edge_weight, species = species)
+    network = _string_api_call(version = string_version, genes = query, method = 'network_interactions', score_threshold = edge_weight, species = species)
     network_df = pd.read_csv(io.StringIO(network.decode('utf-8')), sep = '\t')
 
     # Get the STRING PPI enrichment values
-    enrichment = _string_api_call(genes = query, method = 'ppi_enrichment', score_threshold = edge_weight, species = species)
+    enrichment = _string_api_call(version = string_version, genes = query, method = 'ppi_enrichment', score_threshold = edge_weight, species = species)
     enrichment_df = pd.read_csv(io.StringIO(enrichment.decode('utf-8')), sep = '\t')
     p_value = enrichment_df['p_value'][0]
 
     # Get the STRING network
-    network_image = _string_api_call(genes = query, method = 'network_image', score_threshold = edge_weight, species = species)
+    network_image = _string_api_call(version = string_version, genes = query, method = 'network_image', score_threshold = edge_weight, species = species)
     network_image = Image.open(io.BytesIO(network_image))
 
     # Get the functional enrichment of the gene set
-    functional_enrichment = _string_api_call(genes = query, method = 'functional_enrichment', score_threshold = edge_weight, species = species)
+    functional_enrichment = _string_api_call(version = string_version, genes = query, method = 'functional_enrichment', score_threshold = edge_weight, species = species)
     functional_enrichment_df = pd.read_csv(io.StringIO(functional_enrichment.decode('utf-8')), sep = '\t')
     enrichment_plots = _plot_enrichment(functional_enrichment_df, plot_fontsize, plot_fontface)
 
@@ -684,7 +713,9 @@ def _check_overlap_dict(overlap_dict: dict, gp1_only_dict:dict, gp2_only_dict:di
         gp1_all_dict = _combine_group(gp1_only_dict, overlap_dict)
         gp2_all_dict = _combine_group(gp2_only_dict, overlap_dict)
         exclusives_dict = _combine_group(gp1_only_dict, gp2_only_dict)
-    return gp1_all_dict, gp2_all_dict, exclusives_dict
+        return gp1_all_dict, gp2_all_dict, exclusives_dict
+    else:
+        return {}, {}, {}
 
 def _diffuse(label_vector:list, ps:csr_matrix) -> lil_matrix:
     """
@@ -1346,7 +1377,7 @@ def _write_sum_txt(result_fl: str, group1_name: str, group2_name: str, gp1_only_
             file_hand.writelines("%s\n" % val)
     file_hand.close()
 
-def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:str = 'Set_2', evidences:list = ['all'], edge_confidence:str = 'all', n_iter: int = 100, cores:int =1, savepath:str = False) -> (Image, float, Image, float): # type: ignore
+def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:str = 'Set_2', string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'all', custom_background:Any = 'string', n_iter: int = 100, cores:int =1, savepath:str = False) -> (Image, float, Image, float): # type: ignore
     """
     Performs network diffusion analysis between two sets of genes.
 
@@ -1372,7 +1403,14 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
     group2_name = set_2_name
 
     # Load STRING network
-    string_net, _ = _load_clean_string_network(evidences, edge_confidence)
+    string_net, string_net_all_genes = _load_clean_string_network(string_version, evidences, edge_confidence)
+    # Define and clean by background gene set
+    if custom_background == 'string':
+        background_genes = string_net_all_genes
+    else:
+        background_dict, background_name = _define_background_list(custom_background)
+        background_genes = background_dict[background_name]
+    string_net = string_net[(string_net['node1'].isin(background_genes)) & (string_net['node2'].isin(background_genes))]
 
     # Get network and diffusion parameters
     _, graph_node, adj_matrix, node_degree, g_degree = _get_graph(string_net)
@@ -2069,7 +2107,7 @@ def _parallel_random_enrichment(unique_gene_sets:dict, background_genes:list, st
 
     return random_sets_connections
 
-def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, custom_background:Any = 'string', savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict): # type: ignore
+def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, string_version:str = 'v11.0', custom_background:Any = 'string', savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict): # type: ignore
     """
     Analyzes gene set interconnectivity and visualizes the results, returning multiple outputs
     including images, lists, and data structures.
@@ -2111,7 +2149,7 @@ def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = No
         at the specified path.
     """
     #load and customize STRINGv11 network for analysis (evidence types, edge weights)
-    string_net, string_net_all_genes = _load_clean_string_network(evidences, edge_confidence)
+    string_net, string_net_all_genes = _load_clean_string_network(string_version, evidences, edge_confidence)
 
     #get degree connectivity after edgeweight filtering
     # network is already edge weight filtered
@@ -2554,38 +2592,26 @@ def _entrez_search(gene:str, disease:str, email:str, api_key:str, field:str) -> 
     Entrez.api_key = api_key
     field = _parse_field(field)
     new_query = f'"{gene}" AND ("{disease}") AND ("gene" or "protein")'
-    try: handle = Entrez.esearch(
-        db = 'pubmed',
-        sort = 'relevance',
-        retmax = '100000',
-        retmode = 'xml',
-        field = field,
-        term = new_query
-    )
-    except IndexError:
-        print(f"{gene} - Not Found")
-    except HTTPError:
-        print('....Network Error-Waiting 10s')
-        time.sleep(10)
-        handle = Entrez.esearch(db = 'pubmed',
-                            sort = 'relevance',
-                            retmax = '100000',
-                            retmode = 'xml',
-                            term = new_query)
-    except IncompleteRead:
-        print('....Network Error-Waiting 10s')
-        time.sleep(10)
-        try: handle = Entrez.esearch(db = 'pubmed',
-                            sort = 'relevance',
-                            retmax = '100000',
-                            retmode = 'xml',
-                            term = new_query)
-        except IncompleteRead:
-            return "IncompleteReadError"
-
-    results = Entrez.read(handle)
-    handle.close()
-    return results
+    retries = 3
+    for attempt in range(retries):
+        try:
+            handle = Entrez.esearch(
+                db='pubmed',
+                sort='relevance',
+                retmax='100000',
+                retmode='xml',
+                field=field,
+                term=new_query
+            )
+            results = Entrez.read(handle)
+            handle.close()
+            return results
+        except (IndexError, URLError, IncompleteRead, HTTPError) as e:
+            if attempt < retries - 1:
+                time.sleep(10)
+            else:
+                print(f'Error: {e}')
+                return None
 
 def _parse_entrez_result(result:dict) -> (str, int): # type: ignore
     """
@@ -2815,13 +2841,14 @@ def pubmed_comentions(query:list, keyword: str, custom_background: Any = 'ensemb
         new_savepath = os.path.join(savepath, f'PubMed_Comentions/{keyword}/')
         os.makedirs(new_savepath, exist_ok=True)
         query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
-        rand_result_df.to_csv(new_savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
-        for key, value in enrich_images.items():
-            value.save(new_savepath + f"PubMedQueryPlot_keyword-{keyword}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
-        # Write results to file
-        with open(new_savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
-            for key,value in enrich_results.items():
-                f.write(f">{key[0] + 1} & <={key[1]} Comentions = {value[0]} (Z = {value[1]})\n")
-            f.close()
+        if run_enrichment:
+            rand_result_df.to_csv(new_savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
+            for key, value in enrich_images.items():
+                value.save(new_savepath + f"PubMedQueryPlot_keyword-{keyword}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
+            # Write results to file
+            with open(new_savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
+                for key,value in enrich_results.items():
+                    f.write(f">{key[0] + 1} & <={key[1]} Comentions = {value[0]} (Z = {value[1]})\n")
+                f.close()
     return query_comention_df, enrich_results, enrich_images
 #endregion

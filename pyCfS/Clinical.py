@@ -22,7 +22,7 @@ import multiprocessing
 from .utils import _fix_savepath, _load_open_targets_mapping, _get_avg_and_std_random_counts, _merge_random_counts, _define_background_list, _get_open_targets_gene_mapping
 
 #region Mouse Phenotype
-def _load_mouse_phenotypes() -> (pd.DataFrame, list):
+def _load_mouse_phenotypes() -> (pd.DataFrame, list): # type: ignore
     """
     Loads mouse phenotype data from a parquet file and returns a dataframe of the data, a list of unique gene IDs, and a
     dictionary of background information.
