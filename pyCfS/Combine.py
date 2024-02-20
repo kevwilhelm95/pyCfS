@@ -175,7 +175,7 @@ def consensus(genes_1:list = False, genes_2:list = False, genes_3: list = False,
 
 
 #region Functional Clustering
-def _load_clean_network(evidences:list, edge_confidence:str) -> (pd.DataFrame, list, pd.DataFrame): # type: ignore
+def _load_clean_network(version:str, evidences:list, edge_confidence:str) -> (pd.DataFrame, list, pd.DataFrame): # type: ignore
     """
     Load and customize STRINGv11 network for analysis.
 
@@ -189,7 +189,7 @@ def _load_clean_network(evidences:list, edge_confidence:str) -> (pd.DataFrame, l
     - string_net_degree_df (pd.Dataframe): Dataframe containing degree connectivity for each gene in the network.
     """
     # load and customize STRINGv11 network for analysis (evidence types, edge weight)
-    string_net = _load_string()
+    string_net = _load_string(version)
     string_net_all_genes = list(set(string_net['node1'].unique().tolist() + string_net['node2'].unique().tolist()))
     evidence_lst = _get_evidence_types(evidences)
     string_net = _select_evidences(evidence_lst, string_net)
@@ -453,8 +453,11 @@ def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Gr
         max_q_inflation = float(inflation)
         print('Using manually set inflation parameter:', str(max_q_inflation))
         # Run MCL algorithm
-        result = mc.run_mcl(A, inflation = max_q_inflation)
-        clusters = mc.get_clusters(result)
+        try:
+            result = mc.run_mcl(A, inflation = max_q_inflation)
+            clusters = mc.get_clusters(result)
+        except ValueError:
+            raise ValueError('Query network has no edges. Please adjust input genes or edge confidence threshold.')
 
         #export cluster proteins
         nodes_list = np.array(list(G.nodes()))
@@ -468,19 +471,26 @@ def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Gr
         mod_values = {}
         #identify best inflation paramater using modularity (Q)
         for inflation in [i / 10 for i in range(15, 30)]:
-            result = mc.run_mcl(A, inflation=float(inflation))
+            try: result = mc.run_mcl(A, inflation=float(inflation))
+            except ValueError: raise ValueError('Query network has no edges. Please adjust input genes or edge confidence threshold.')
             matrix = np.matrix(result)
             clusters = mc.get_clusters(matrix)
             Q = mc.modularity(matrix=matrix, clusters=clusters)
             mod_values[inflation] = Q
-        max_q_inflation = 0
-        max_q = 0
+        # identify inflation parameter with highest modularity
+        max_q_inflation = 1.0
+        max_q = 1.0
         for k, v in mod_values.items():
             if v > max_q:
                 max_q = v
                 max_q_inflation = k
+                response = "Using algorithmically determined inflation parameter: " + str(max_q_inflation)
+        if max_q_inflation == 1:
+            response = "Optimal inflation could not be determined due to too few query edges: Using default inflation parameter: 3.0"
+            max_q_inflation = 3.0
+            max_q = 3.0
         # Run MCL algorithm with optimized inflation parameter
-        print('Using algorithmically determined inflation parameter:', str(max_q_inflation))
+        print(response)
         result = mc.run_mcl(A, inflation = max_q_inflation)
         matrix = np.matrix(result)
         clusters = mc.get_clusters(matrix)
@@ -653,7 +663,9 @@ def _mcl_analysis_random(network_df:pd.DataFrame, true_inflat_parameter:float) -
     G = nx.from_pandas_edgelist(network_df[['node1', 'node2']], 'node1', 'node2')
      # Build adjacency matrix
     A = nx.to_numpy_array(G)
-    result = mc.run_mcl(A, inflation = true_inflat_parameter)
+    try: result = mc.run_mcl(A, inflation = true_inflat_parameter)
+    except ValueError:
+        return [()], {}
     clusters = mc.get_clusters(result)
 
     # export cluster proteins
@@ -939,6 +951,9 @@ def _annotate_percentile_of_score(a:float , b:int) -> float:
     Returns:
         float: The percentile of the score in the list.
     """
+    if np.isnan(b):
+        print("Warning: All background tests contain no edges. Please decrease edge confidence")
+        b = [1.0]
     return percentileofscore(b, a)
 
 def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_merged_tuple_set:dict) -> dict:
@@ -971,7 +986,7 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
                 continue
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
+def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
     """
     Perform functional clustering analysis on a set of genes.
 
@@ -998,6 +1013,7 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
     """
     # Clean the network
     string_net, string_net_all_genes, string_net_degree_df = _load_clean_network(
+        string_version,
         evidences,
         edge_confidence
     )

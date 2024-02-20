@@ -67,7 +67,7 @@ def _load_grch38_background(just_genes:bool = True) -> Any:
         df.set_index('gene', inplace = True)
         return df
 
-def _load_string() -> pd.DataFrame:
+def _load_string(version:str) -> pd.DataFrame:
     """Return a dataframe of STRINGv11 protein-protein interactions
 
     Contains the following fields:
@@ -85,7 +85,9 @@ def _load_string() -> pd.DataFrame:
     -------
         pd.DataFrame of STRINGv11 protein interactions
     """
-    stream = pkg_resources.resource_stream(__name__, 'data/STRINGv11_ProteinNames_DetailedEdges_07062022.feather')
+    if version not in ['v11.0', 'v11.5', 'v12.0']:
+        raise ValueError("Version must be 'v11.0', 'v11.5', or 'v12.0'")
+    stream = pkg_resources.resource_stream(__name__, f'data/9606.protein.links.detailed.{version}.feather')
     return pd.read_feather(stream)
 
 def _load_open_targets_mapping() -> pd.DataFrame:
@@ -380,7 +382,7 @@ def _get_edge_weight(edge_confidence:str) -> float:
         weight = 0.4
     return weight
 
-def _load_clean_string_network(evidences:list, edge_confidence:str) -> pd.DataFrame:
+def _load_clean_string_network(version:str, evidences:list, edge_confidence:str) -> pd.DataFrame:
     """
     Load and clean the STRING network based on the provided evidences and edge confidence.
 
@@ -393,7 +395,7 @@ def _load_clean_string_network(evidences:list, edge_confidence:str) -> pd.DataFr
     - string_net_genes (list): List of genes present in the cleaned network.
     """
     # Load STRING
-    string_net = _load_string()
+    string_net = _load_string(version)
     # Parse the evidences and edge confidence
     evidence_lst = _get_evidence_types(evidences)
     string_net = _select_evidences(evidence_lst, string_net)
