@@ -1,5 +1,6 @@
 # pyCfS
-The aggregation of Lichtarge Lab genotype-phenotype validation experiments
+Version 0.0.10 <br>
+The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 #### Installation
 ##### Install Git-LFS (in terminal)
@@ -38,6 +39,8 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
     - `protein_family_enrichment`
     - `drug_gene_interactions`
     - `depmap_enrichment`
+- `pyCFS.Population`
+    - `variants_by_sample`
 
 # Modules
 
@@ -316,4 +319,21 @@ Pulls drug-gene interactions in order to find potential repurposable therapies.
     - `approved` (bool) : Filter for FDA-approved or not drugs. Default = True.
     - `savepath` (str) : File path
 #### Returns:
- - `dict` : Resource name and drug interactors (e.g. {'DGIdb': pd.DataFrame})
+- `dict` : Resource name and drug interactors (e.g. {'DGIdb': pd.DataFrame})
+
+
+
+
+## pyCFS.Population
+### `variants_by_sample()`
+Parses the input VCF to create a .csv of samples and their individual variants in the queried genes.
+#### Parameters:
+- `query` (list): List of genes.
+- `vcf_path` (str): Path to .gz vcf file. Index (.tbi) should be in the same directory.
+- `samples` (pd.DataFrame): Two-column df containing samples (name = "SampleID") and their case(1)/control(0) mappings (name = "CaseControl")
+- **Optional**:
+    - `transcript` (str): Method for parsing transcripts. Default = 'canonical'. Options = 'canonical', 'max', 'mean'
+    - `cores` (int): Cores for parallelization. Default = 1
+    - `savepath` (str): Path to save dataframe.
+#### Returns:
+- `pd.DataFrame` : Dataframe of parsed variants for each individual.

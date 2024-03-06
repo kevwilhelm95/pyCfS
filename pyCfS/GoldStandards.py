@@ -332,7 +332,7 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
         max_term_length = enrichment_terms.str.len().max()
         plot_width = (max_term_length * plot_fontsize) / 61
         return plot_width
-    def _check_viable_plot_size(width: float, height: float, plot_fontsize:int, dpi: int = 300) -> (float, float):
+    def _check_viable_plot_size(width: float, height: float, plot_fontsize:int, dpi: int = 300) -> (float, float): # type: ignore
         """
         Check if the calculated plot size is viable and adjust if necessary.
 
@@ -2606,7 +2606,15 @@ def _entrez_search(gene:str, disease:str, email:str, api_key:str, field:str) -> 
             results = Entrez.read(handle)
             handle.close()
             return results
-        except (IndexError, URLError, IncompleteRead, HTTPError) as e:
+        except HTTPError as e:
+            if e.code == 502:
+                # Specific action for 502 Bad Gateway error
+                raise RuntimeError('Received a 502 Bad Gateway error from the PubMed server. Please try again later.')
+            elif attempt < retries - 1:
+                time.sleep(10)
+            else:
+                raise RuntimeError(f'Failed to retrieve data after {retries} attempts due to error: {e}')
+        except (IndexError, URLError, IncompleteRead) as e:
             if attempt < retries - 1:
                 time.sleep(10)
             else:
@@ -2838,6 +2846,7 @@ def pubmed_comentions(query:list, keyword: str, custom_background: Any = 'ensemb
 
     if savepath:
         savepath = _fix_savepath(savepath)
+        print(savepath)
         new_savepath = os.path.join(savepath, f'PubMed_Comentions/{keyword}/')
         os.makedirs(new_savepath, exist_ok=True)
         query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
