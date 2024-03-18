@@ -1431,14 +1431,14 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_1_plot = r_gp1o_gp2[1][0]
-        show_1_z = r_gp1o_gp2[0][0]
+        show_1_z = r_gp1o_gp2[0][1][0]
         # From group 2 exclusive to group 1 all:
         r_gp2o_gp1 = _get_results(
             gp2_only_dict, gp1_all_dict, group2_name+'Excl', group1_name, show = '__SHOW_2_',
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_2_plot = r_gp2o_gp1[1][0]
-        show_2_z = r_gp2o_gp1[0][0]
+        show_2_z = r_gp2o_gp1[0][1][0]
         # From group 1 exclusive to group 2 exclusive:
         r_gp1o_gp2o = _get_results(
             gp1_only_dict, gp2_only_dict, group1_name+'Excl', group2_name+'Excl',

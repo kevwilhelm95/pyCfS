@@ -1,9 +1,9 @@
 # pyCfS
-Version 0.0.10 <br>
+Version 0.0.11 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
-#### Installation
-##### Install Git-LFS (in terminal)
+## Installation
+### Install Git-LFS (in terminal)
 Mac (Homebrew) - `brew install git-lfs` <br>
 Windows - Follow instructions here: https://gitforwindows.org/ <br>
 Ubuntu/Debian - `sudo apt-get install git-lfs` <br>
@@ -11,7 +11,12 @@ Fedora/CentOS - `sudo yum install git-lfs`<br>
 <br>
 Activate git-lfs - `git lfs install` <br>
 
-##### Install pyCfS (in anaconda environment)
+### Create an anaconda environment and install non-pip packages
+conda create -f pyCfS python=3.9 <br>
+conda activate pyCfS<br>
+conda install -c conda-forge r-base=4.1.1 r-ggplot2=3.4.0 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr <br>
+
+### Install pyCfS (in anaconda environment)
 pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
 (Ensure pip is pointing to anaconda environment, if it is not, use anaconda environment pip: /path/to/env/../bin/pip install git+...) <br>
 
@@ -41,6 +46,8 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
     - `depmap_enrichment`
 - `pyCFS.Population`
     - `variants_by_sample`
+- `pyCFS.Structure`
+    - `lollipop_plot`
 
 # Modules
 
@@ -337,3 +344,30 @@ Parses the input VCF to create a .csv of samples and their individual variants i
     - `savepath` (str): Path to save dataframe.
 #### Returns:
 - `pd.DataFrame` : Dataframe of parsed variants for each individual.
+
+
+
+
+## pyCFS.Structure
+### `lollipop_plot()`
+Generates a lollipop plot given case and control variants.
+#### Parameters:
+- `variants` (pd.DataFrame): List of variants by sample. Can get from "variants_by_sample()"
+- `gene` (str): Gene name that you wish to plot ("PDGFRB")
+- **Optional**:
+    - `case_pop` (int): The number of cases in your population. If not defined, it is calculated from the input variants dataframe.
+    - `cont_pop` (int): The number of controls in your population. If not defined, it is calculated from the input variants dataframe.
+    - `max_af` (float): Max allele frequency to display in the plot. Default = 1.0 or 100%
+    - `ea_lower` (float): Minimum EA score to include. Default = 0
+    - `ea_upper` (float): Maximum EA score to include. Default = 100
+    - `show_domains` (bool): Toggle plotting of domains in structure. Defaut = True
+    - `ac_scale` (str): Change the scale of the y-axis. Default = 'linear'. Options = ['linear', 'log']
+    - `ea_color` (str): Color scale for Lollipop and Linear structure. Default = 'prismatic'. Options = ['prismatic', 'gray_scale', 'EA_bin', 'black']
+    - `domain_min_dist` (int): The minimum distance that separates protein domains. Default = 20
+    - `savepath` (str): Directory to save
+#### Returns:
+- `Image`: Lollipop plot
+- `float`: P-value of Odds Ratio
+- `float`: Odds Ratio
+- `float`: Lower Odds Ratio Confidence Interval
+- `float`: Upper Odds Ratio Confidence Interval
