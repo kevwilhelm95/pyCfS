@@ -557,7 +557,7 @@ def _get_fdr_plot(summary_matrix:pd.DataFrame, bin_size:float, x_min:float, x_ma
     plt.close()
     return image
 
-def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image):
+def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image): # type: ignore
     """
     Performs a phenotype enrichment analysis on a list of genes using the Mouse Genome Informatics (MGI) database.
 
@@ -664,7 +664,7 @@ def _get_level_class(x_array:list, level:str) -> str:
         out = 'no_level_assignment'
     return out
 
-def _get_protein_class_data(targets_df: pd.DataFrame, mapping_dict:dict) -> (pd.DataFrame, list):
+def _get_protein_class_data(targets_df: pd.DataFrame, mapping_dict:dict) -> (pd.DataFrame, list): # type: ignore
     """
     Retrieves protein class data from the given targets dataframe and mapping dictionary.
 
@@ -708,7 +708,7 @@ def _get_protein_class_data(targets_df: pd.DataFrame, mapping_dict:dict) -> (pd.
 
     return targets_df, targets_class_proteins_genes
 
-def _get_family_files() -> (pd.DataFrame, list):
+def _get_family_files() -> (pd.DataFrame, list): # type: ignore
     """
     Load protein family data and clean the protein family table.
 
@@ -947,7 +947,7 @@ def _protein_class_strip_plot(df:pd.DataFrame, q_cut:float, sig_dot_color:str, f
     plt.close()
     return image
 
-def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image):
+def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image): # type: ignore
     """
     Perform protein family enrichment analysis.
 
@@ -1024,7 +1024,7 @@ def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', lev
 
 
 #region DepMap Scores
-def _load_depmap() -> (pd.DataFrame, list):
+def _load_depmap() -> (pd.DataFrame, list): # type: ignore
     """
     Load the DepMap data from a feather file and return a DataFrame and a list of all DepMap IDs.
 
@@ -1169,7 +1169,7 @@ def _plot_depmap_distributions(query_avg_score:list, control_avg_score:list, p_v
     plt.close()
     return image
 
-def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'depmap', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_query_color:str = 'red', plot_background_color:str = 'gray', savepath:str = False) -> (float, Image):
+def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'depmap', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_query_color:str = 'red', plot_background_color:str = 'gray', savepath:str = False) -> (float, Image): # type: ignore
     """
     Performs enrichment analysis using DepMap scores for a given query gene list and cancer type.
 
