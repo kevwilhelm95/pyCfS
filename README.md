@@ -12,7 +12,7 @@ Fedora/CentOS - `sudo yum install git-lfs`<br>
 Activate git-lfs - `git lfs install` <br>
 
 ### Create an anaconda environment and install non-pip packages
-conda create -f pyCfS python=3.8.18 <br>
+conda create -n pyCfS python=3.8.18 <br>
 conda activate pyCfS<br>
 conda install -c conda-forge r-base r-ggplot2=3.4.0 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr <br>
 
