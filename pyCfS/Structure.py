@@ -11,6 +11,7 @@ os.environ['R_HOME'] = r_path
 
 import tempfile
 from IPython.display import Image, display
+import rpy2
 from rpy2.robjects.packages import importr, isinstalled
 import rpy2.robjects as robjects
 from rpy2.robjects import r, pandas2ri, globalenv
@@ -30,6 +31,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning,
                         message="invalid value encountered in log")
 warnings.filterwarnings("ignore", category=RuntimeWarning, 
                         message="invalid value encountered in sqrt")
+rpy2.rinterface_lib.callbacks.logger.setLevel(logging.ERROR)
 
 
 #region Lollipop Plots
@@ -200,8 +202,6 @@ def _r_lollipop_plot(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_doma
     # Set CRAN mirror
     cran_mirror = "https://cran.rstudio.com"  # Set your desired CRAN mirror URL here
     robjects.r.options(repos=cran_mirror)
-    # Set access token
-    os.environ['GITHUB_PAT'] = "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"
     # Install R packages
     _r_install_package('remotes')
     _r_install_package('EvoTrace')
