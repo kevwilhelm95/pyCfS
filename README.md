@@ -14,7 +14,7 @@ Activate git-lfs - `git lfs install` <br>
 ### Create an anaconda environment and install non-pip packages
 conda create -f pyCfS python=3.9 <br>
 conda activate pyCfS<br>
-conda install -c conda-forge r-base=4.1.1 r-ggplot2=3.4.0 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr <br>
+conda install -c conda-forge r-base=4.1.1 r-ggplot2=3.4.0 r-deldir=1.0_9 r-rcppeigen=0.3.3.9.3 r-interp=1.1_4 rpy2=3.5.11 rasterio=1.2.10 r-tzdb=0.4.0 r-vroom=1.6.3 r-readr=2.1.4 <br>
 
 ### Install pyCfS (in anaconda environment)
 pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
