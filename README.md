@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.11 <br>
+Version 0.0.11.1 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -175,9 +175,9 @@ Assess the broad network connectivity between two gene sets in the STRING networ
     - `savepath` (str): Path for saving.
 #### Returns:
 - `Image`: AUROC plot for show_1 (Most often "from Set1 Exclusive to Set2")
-- `float`: Z-score for show_1 AUROC
+- `float`: Z-score for show_1 AUROC (randomized set1, degree-matched)
 - `Image`: AUROC plot for show_2 (Most often "from Set2 Exclusive to Set1")
-- `float`: Z-score for show_2 AUROC
+- `float`: Z-score for show_2 AUROC (randomized set2, degree-matched)
 
 
 ### `interconnectivity()`
