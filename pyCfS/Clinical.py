@@ -61,7 +61,7 @@ def _get_pheno_counts(matrix:pd.DataFrame, gene_list:list) -> dict:
     df_dict = df.to_dict()['freq']
     return df_dict
 
-def _process_gene(args:list) -> None:
+def _process_gene(mgi_df:pd.DataFrame, g:str, model_pheno_label_gene_mappings: dict, lock: multiprocessing.Lock) -> None:
     """
     Process a gene and update the model_pheno_label_gene_mappings dictionary.
 
@@ -71,7 +71,7 @@ def _process_gene(args:list) -> None:
     Returns:
         None
     """
-    mgi_df, g, model_pheno_label_gene_mappings, lock = args
+    #mgi_df, g, model_pheno_label_gene_mappings, lock = args
     df = mgi_df[mgi_df['gene_ID'] == g]
     df_phenos = df['modelPhenotypeLabel'].tolist()
     for p in df_phenos:
@@ -99,7 +99,7 @@ def _get_pheno_gene_mappings(mgi_df: pd.DataFrame, mgi_genes: list, num_cores:in
     model_pheno_label_gene_mappings = manager.dict()
     lock = manager.Lock()
     with multiprocessing.Pool(processes=num_cores) as pool:
-        pool.map(_process_gene, [(mgi_df, g, model_pheno_label_gene_mappings, lock) for g in mgi_genes])
+        pool.starmap(_process_gene, [(mgi_df, g, model_pheno_label_gene_mappings, lock) for g in mgi_genes])
 
     model_pheno_label_gene_mappings = dict(model_pheno_label_gene_mappings)
 
@@ -318,11 +318,8 @@ def _get_output_matrix(target_counts:dict, random_dict:dict, model_pheno_label_g
     summary_df = summary_df[summary_df['RandomStdFreq'] != 0]
     summary_df = _or_fdr(summary_df)
     summary_df['geneMappings'] = summary_df.index.map(model_pheno_label_gene_mappings)
-    print(summary_df.head())
     summary_df['geneMappings'] = summary_df['geneMappings'].apply(lambda x: [y for y in x if y in target_genes])
-    print(summary_df.head())
     summary_df['geneMappings'] = [",".join(x) for x in summary_df['geneMappings']]
-    print(summary_df.head())
 
     # Add the HighLevelPhenotypes
     mgi_df['UpperLevelLabel'] = mgi_df['modelPhenotypeClasses'].apply(lambda x: [item['label'] for item in x])
@@ -589,14 +586,6 @@ def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', ra
     mgi_df, mgi_genes = _load_mouse_phenotypes()
     target_genes_pheno_counts = _get_pheno_counts(mgi_df, query)
     model_pheno_label_gene_mappings = _get_pheno_gene_mappings(mgi_df, mgi_genes, cores)
-    ###
-    df = pd.DataFrame(list(model_pheno_label_gene_mappings.items()), columns=['key', 'list'])
-    df['len(list)'] = df['list'].apply(len)
-    df = df.sort_values('len(list)', ascending=False)
-    print(df.head())
-    test = df[df['key'] == 'kinked neural tube']
-    print(test.head())
-
     # Summary - Write to file
     print('# of target genes tested in MGI: {}/{}'.format(
         len([x for x in query if x in mgi_genes]),
