@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.11.1 <br>
+Version 0.0.11.2 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
