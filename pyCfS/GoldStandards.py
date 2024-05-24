@@ -1,4 +1,5 @@
-"""Collection of functions looking at previous genetic overlap recovery
+"""
+Collection of functions looking at previous genetic overlap recovery
 
 Functions:
 
@@ -2568,7 +2569,7 @@ def _parse_field(field: str) -> Any:
         return None
     return field
 
-def _entrez_search(gene:str, disease:str, email:str, api_key:str, field:str) -> 'Entrez.Parser.DictionaryElement':
+def _entrez_search(gene:str, disease:str, custom_terms:str, email:str, api_key:str, field:str) -> 'Entrez.Parser.DictionaryElement':
     """
     Conducts a search on the Entrez (PubMed) database for articles related to a specific gene and disease.
 
@@ -2591,7 +2592,13 @@ def _entrez_search(gene:str, disease:str, email:str, api_key:str, field:str) -> 
     Entrez.email = email
     Entrez.api_key = api_key
     field = _parse_field(field)
-    new_query = f'"{gene}" AND ("{disease}") AND ("gene" or "protein")'
+    if not any([gene, disease, custom_terms]):
+        raise ValueError("At least one of gene, disease, or custom_term must be provided.")
+    # Construct query
+    if gene and disease:
+        new_query = f'"{gene}" AND ("{disease}") AND (("gene") OR ("protein"))'
+    if gene and custom_terms:
+        new_query = f'"{gene}" AND {custom_terms}'
     retries = 3
     for attempt in range(retries):
         try:
@@ -2662,7 +2669,7 @@ def _parse_entrez_result(result:dict) -> (str, int): # type: ignore
             n_paper_dis = int(result['Count'])
     return gene, n_paper_dis
 
-def _fetch_query_pubmed(query: list, keyword: str, email: str, api_key: str, field:str, cores: int) -> pd.DataFrame:
+def _fetch_query_pubmed(query: list, keyword: str, custom_terms:str, email: str, api_key: str, field:str, cores: int) -> pd.DataFrame:
     """
     Fetches publication data from PubMed for a list of genes related to a specific keyword.
     This function concurrently queries PubMed for each gene and compiles the results into
@@ -2679,7 +2686,8 @@ def _fetch_query_pubmed(query: list, keyword: str, email: str, api_key: str, fie
         pd.DataFrame: A DataFrame indexed by gene names with the count of related papers and PMIDs.
     """
     # Initialize data frames to store the query results and output data
-    out_df = pd.DataFrame(columns=['Count', 'PMID for Gene + ' + str(keyword)], index=query)
+    col_name = keyword if keyword else custom_terms
+    out_df = pd.DataFrame(columns=['Count', 'PMID for Gene + ' + col_name], index=query)
 
     # Check field validity
     if field not in ['all', 'title/abstract', 'title']:
@@ -2687,12 +2695,12 @@ def _fetch_query_pubmed(query: list, keyword: str, email: str, api_key: str, fie
 
     # Execute concurrent API calls to PubMed
     with concurrent.futures.ThreadPoolExecutor(max_workers=cores) as executor:
-        results = executor.map(_entrez_search, query, repeat(keyword), repeat(email), repeat(api_key), repeat(field))
+        results = executor.map(_entrez_search, query, repeat(keyword), repeat(custom_terms), repeat(email), repeat(api_key), repeat(field))
         # Process results for each gene
         for result in results:
             gene, n_paper_dis = _parse_entrez_result(result)
             # Populate the data frames with the results
-            out_df.loc[gene, 'PMID for Gene + ' + keyword] = "; ".join(result.get('IdList', []))
+            out_df.loc[gene, 'PMID for Gene + ' + col_name] = "; ".join(result.get('IdList', []))
             out_df.loc[gene, 'Count'] = n_paper_dis
 
     # Sort the output data frame by the count of related papers in descending order
@@ -2700,7 +2708,7 @@ def _fetch_query_pubmed(query: list, keyword: str, email: str, api_key: str, fie
 
     return sorted_out_df
 
-def _fetch_random_pubmed(query: list, disease_query: str, email: str, api_key: str, cores: int, field:str, trials:int, background_genes:list) -> list:
+def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, email: str, api_key: str, cores: int, field:str, trials:int, background_genes:list) -> list:
     """
     Performs PubMed queries on random sets of genes and records the number of papers
     associated with a disease for each gene in the set.
@@ -2731,7 +2739,7 @@ def _fetch_random_pubmed(query: list, disease_query: str, email: str, api_key: s
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=cores) as executor:
             # Map the search function over the random genes
-            results = executor.map(_entrez_search, randgenes, repeat(disease_query), repeat(email), repeat(api_key), repeat(field))
+            results = executor.map(_entrez_search, randgenes, repeat(disease_query), repeat(custom_terms), repeat(email), repeat(api_key), repeat(field))
             # Process the results and update the temporary DataFrame
             for result in results:
                 gene, n_paper_dis = _parse_entrez_result(result)
@@ -2795,7 +2803,7 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
 
     return image
 
-def pubmed_comentions(query:list, keyword: str, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict): # type: ignore
+def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict): # type: ignore
     """
     Searches PubMed for comention of genes within articles related to a given field and
     performs a randomization test to compute Z-scores for observed mention counts.
@@ -2820,14 +2828,15 @@ def pubmed_comentions(query:list, keyword: str, custom_background: Any = 'ensemb
         dict : Dictionary, where keys = enrichment_cutoff values and values = (number of query genes in subset, z_score)
         dict : Dictionary, where keys = enrichment_cutoff values and values = enrichment plot.
     """
+    output_name = keyword if keyword else custom_terms
     # Pull the query co_mentions with keyword
-    query_comention_df = _fetch_query_pubmed(query, keyword, email, api_key, field, workers)
+    query_comention_df = _fetch_query_pubmed(query, keyword, custom_terms, email, api_key, field, workers)
 
     # Pull co_mentions for a random set of genes
     if run_enrichment:
         background_dict, background_name = _define_background_list(custom_background)
         background_genes = background_dict[background_name]
-        rand_dfs = _fetch_random_pubmed(query, keyword, email, api_key, workers, field, enrichment_trials, background_genes)
+        rand_dfs = _fetch_random_pubmed(query, keyword, custom_terms, email, api_key, workers, field, enrichment_trials, background_genes)
         enrich_results, enrich_images = {}, {}
         rand_result_df = pd.DataFrame({'Iteration': range(0, len(rand_dfs))})
         for min_thresh, max_thresh in enrichment_cutoffs:
@@ -2846,16 +2855,15 @@ def pubmed_comentions(query:list, keyword: str, custom_background: Any = 'ensemb
 
     if savepath:
         savepath = _fix_savepath(savepath)
-        print(savepath)
-        new_savepath = os.path.join(savepath, f'PubMed_Comentions/{keyword}/')
+        new_savepath = os.path.join(savepath, f'PubMed_Comentions/{output_name}/')
         os.makedirs(new_savepath, exist_ok=True)
-        query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{keyword}_field-{field}.csv")
+        query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{output_name}_field-{field}.csv")
         if run_enrichment:
-            rand_result_df.to_csv(new_savepath + f"PubMedQueryRandomResults_keyword-{keyword}_field-{field}.csv", index = False)
+            rand_result_df.to_csv(new_savepath + f"PubMedQueryRandomResults_keyword-{output_name}_field-{field}.csv", index = False)
             for key, value in enrich_images.items():
-                value.save(new_savepath + f"PubMedQueryPlot_keyword-{keyword}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
+                value.save(new_savepath + f"PubMedQueryPlot_keyword-{output_name}_field-{field}_thresh-[>{key[0]},<={key[1]}].png")
             # Write results to file
-            with open(new_savepath + f"PubMedQueryResults_keyword-{keyword}_field-{field}.txt", 'w') as f:
+            with open(new_savepath + f"PubMedQueryResults_keyword-{output_name}_field-{field}.txt", 'w') as f:
                 for key,value in enrich_results.items():
                     f.write(f">{key[0] + 1} & <={key[1]} Comentions = {value[0]} (Z = {value[1]})\n")
                 f.close()
