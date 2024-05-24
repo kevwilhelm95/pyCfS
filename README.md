@@ -233,8 +233,9 @@ Assess the enrichment for co-localization within X Mbp of genome-wide significan
 Assess the enrichment for co-mentions with specific keywords in PubMed.
 #### Parameters:
 - `query` (list): List of genes.
-- `keyword` (str): Keyword to search co-mentions for.
 - **Optional**:
+    - `keyword` (str): Keyword to search co-mentions for. Default search query is '("{gene}") AND ("{keyword"}) AND (("gene") OR ("protein"))'.
+    - `custom_terms` (str): A custom search query for PubMed. Function will add and "AND" to the end of the gene and then add your custom term after. For example, the custom_term = '(("adipose") OR ("diabetes")) AND (("gene") OR ("protein"))' would produce a search of '("{gene}") AND (("adipose") OR ("diabetes")) AND (("gene") OR ("protein"))'
     - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
     - `email` (str): Email of a PubMed account. (Default = my email).
     - `api_key` (str): API key of PubMed account. (Default = my key).
