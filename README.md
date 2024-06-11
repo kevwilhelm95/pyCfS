@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.11.4 <br>
+Version 0.0.11.5 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -14,7 +14,7 @@ Activate git-lfs - `git lfs install` <br>
 ### Create an anaconda environment and install non-pip packages
 conda create -n pyCfS python=3.8.18 <br>
 conda activate pyCfS<br>
-conda install -c conda-forge r-base r-ggplot2=3.4.0 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr <br>
+conda install -c conda-forge r-base r-ggplot2=3.4.0 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr r-cowplot r-tidyverse=1.3.2 <br>
 
 ### Install pyCfS (in anaconda environment)
 pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
@@ -351,11 +351,12 @@ Parses the input VCF to create a .csv of samples and their individual variants i
 
 ## pyCFS.Structure
 ### `lollipop_plot()`
-Generates a lollipop plot given case and control variants.
+Generates a lollipop plot given case and control variants and tests odds ratios (for 'both' only).
 #### Parameters:
 - `variants` (pd.DataFrame): List of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to plot ("PDGFRB")
 - **Optional**:
+    - `group` (str): Which side (case/control) to plot. 'both' plots case on top and controls on bottom. 'case'/'control' plots only one or the other. Default = 'both'.
     - `case_pop` (int): The number of cases in your population. If not defined, it is calculated from the input variants dataframe.
     - `cont_pop` (int): The number of controls in your population. If not defined, it is calculated from the input variants dataframe.
     - `max_af` (float): Max allele frequency to display in the plot. Default = 1.0 or 100%
