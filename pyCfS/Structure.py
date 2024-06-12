@@ -26,6 +26,7 @@ import time
 import statsmodels.api as sm
 import warnings
 import pkg_resources
+import multiprocessing as mp
 from io import BytesIO
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -515,12 +516,21 @@ def _get_plddt(prot_id:str, gene:str, chain:str, plddt_cutoff:int, savepath:str)
     background_resi = af_model_clean['POS'].unique().tolist()
     return background_resi, pdb_path
 
-def _plot_scw_z(output_df:pd.DataFrame):
-    sns.lineplot(data=output_df, x='dist_cutoff', y='z_score', hue='scw_type')
-    plt.axhline(y=2, color='red', linestyle='--')
-    plt.xlim([args.min_cutoff - 1, args.max_cutoff + 1])
+def _scw_analysis(pdb_path:str, background_resi:list, residues:pd.DataFrame, chain:str, dist_cutoff:int) -> pd.DataFrame:
+    """
+    Perform SCW analysis on a protein structure.
 
-def _scw_analysis(pdb_path:str, background_resi:list, residues:pd.DataFrame, chain:str, dist_cutoff:int):
+    Args:
+        pdb_path (str): Path to the PDB file.
+        background_resi (list): List of background residue positions.
+        residues (pd.DataFrame): DataFrame containing residue information.
+        chain (str): Chain identifier.
+        dist_cutoff (int): Distance cutoff for SCW analysis.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the computed Z-scores.
+
+    """
     # Install EvoTrace
     _r_install_package('EvoTrace')
     evotrace = importr('EvoTrace')
@@ -549,7 +559,111 @@ def _scw_analysis(pdb_path:str, background_resi:list, residues:pd.DataFrame, cha
         z_score['dist'] = dist_cutoff
     return z_score
 
-def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, min_af:float = 0.0, ea_lower:int = 0, ea_upper:int = 100, scw_chain:str = 'A', scw_plddt_cutoff: int = 50, scw_min_dist_cutoff:int = 4, scw_max_dist_cutoff:int = 12, savepath: str=False) -> (pd.DataFrame, pd.DataFrame): # type: ignore
+def _scw_analysis_task(pdb_path:str, background_resi:pd.DataFrame, residue:pd.DataFrame, scw_chain:str, dist_cutoff:int, annotate_background:str) -> pd.DataFrame:
+    """
+    Wrapper function for SCW analysis to be used in multiprocessing.
+
+    Args:
+        pdb_path (str): Path to the PDB file.
+        background_resi (list): Background residues.
+        residue (list): Residue list.
+        scw_chain (str): SCW chain identifier.
+        dist_cutoff (int): Distance cutoff.
+        scw_plddt_cutoff (float): pLDDT cutoff value.
+
+    Returns:
+        DataFrame: Resulting DataFrame with analysis results.
+    """
+    result = _scw_analysis(pdb_path, background_resi, residue, scw_chain, dist_cutoff)
+    result['type'] = annotate_background
+    return result
+
+def _parallel_scw_analysis(pdb_path:str, all_residues:pd.DataFrame, case_vars_residues:pd.DataFrame, cont_vars_residues:pd.DataFrame, all_background_resi: pd.DataFrame, plddt_background_resi: pd.DataFrame, scw_chain:str, scw_min_dist_cutoff: int, scw_max_dist_cutoff:int, scw_plddt_cutoff: int, cores:int) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame): # type: ignore
+    """
+    Parallelizes the SCW analysis across multiple residues, background residues, and distance cutoffs using multiprocessing.
+
+    Args:
+        pdb_path (str): Path to the PDB file.
+        all_residues (list): All residues.
+        case_vars_residues (list): Case variable residues.
+        cont_vars_residues (list): Control variable residues.
+        all_background_resi (list): All background residues.
+        plddt_background_resi (list): pLDDT background residues.
+        scw_chain (str): SCW chain identifier.
+        scw_min_dist_cutoff (int): Minimum distance cutoff.
+        scw_max_dist_cutoff (int): Maximum distance cutoff.
+        scw_plddt_cutoff (float): pLDDT cutoff value.
+
+    Returns:
+        tuple: Concatenated DataFrames for all_output_df, case_output_df, and cont_output_df.
+    """
+    residues = [all_residues, case_vars_residues, cont_vars_residues]
+    backgrounds = [all_background_resi, plddt_background_resi]
+
+    tasks = [(pdb_path, background_resi, residue, scw_chain, dist_cutoff,
+                'all' if background_resi == all_background_resi else f'plddt >{scw_plddt_cutoff}')
+                for residue in residues
+                for background_resi in backgrounds
+                for dist_cutoff in range(scw_min_dist_cutoff, scw_max_dist_cutoff + 1)]
+
+    with mp.Pool(processes=cores) as pool:
+        results = pool.starmap(_scw_analysis_task, tasks)
+
+    # Group results back to the structure (all_output_df, case_output_df, cont_output_df)
+    results_per_residue = len(backgrounds) * (scw_max_dist_cutoff - scw_min_dist_cutoff + 1)
+    grouped_results = [results[i:i + results_per_residue] for i in range(0, len(results), results_per_residue)]
+
+    all_output_df = pd.concat(grouped_results[0])
+    case_output_df = pd.concat(grouped_results[1])
+    cont_output_df = pd.concat(grouped_results[2])
+
+    return all_output_df, case_output_df, cont_output_df
+
+def _plot_scw_z(output_df:pd.DataFrame, scw_plddt_cutoff: int) -> PILImage.Image:
+    """
+    Create a plot similar to the provided image using the given dataframe.
+
+    Args:
+        dataframe (pd.DataFrame): DataFrame containing the data to be plotted.
+    """
+    # Set the aesthetic style of the plots
+    sns.set_theme(style="whitegrid")
+
+    # Create a figure and a set of subplots
+    _, axes = plt.subplots(nrows=2, ncols=1, figsize=(10, 8), sharex=True)
+
+    # Filter data for each type
+    all_data = output_df[output_df['type'] == 'all']
+    plddt_data = output_df[output_df['type'] == f'plddt >{scw_plddt_cutoff}']
+
+    # Plot the data for 'all'
+    sns.lineplot(ax=axes[0], data=all_data, x='dist', y='bias', marker='o', label='bias', color='green')
+    sns.lineplot(ax=axes[0], data=all_data, x='dist', y='unbias', marker='o', label='unbias', color='blue')
+    sns.lineplot(ax=axes[0], data=all_data, x='dist', y='adj_dist', marker='o', label='adj_dist', color='red')
+    axes[0].axhline(2, ls='--', color='red')
+    axes[0].set_ylabel('Z_score')
+    axes[0].set_title('all_resi')
+
+    # Plot the data for 'plddt >50'
+    sns.lineplot(ax=axes[1], data=plddt_data, x='dist', y='bias', marker='o', label='bias', color='green')
+    sns.lineplot(ax=axes[1], data=plddt_data, x='dist', y='unbias', marker='o', label='unbias', color='blue')
+    sns.lineplot(ax=axes[1], data=plddt_data, x='dist', y='adj_dist', marker='o', label='adj_dist', color='red')
+    axes[1].axhline(2, ls='--', color='red')
+    axes[1].set_ylabel('Z_score')
+    axes[1].set_xlabel('dist_cutoff')
+    axes[1].set_title(f'pLDDT > {scw_plddt_cutoff}')
+
+    # Adjust layout and show plot
+    plt.tight_layout()
+    # Save plot
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png', dpi = 300)
+    buffer.seek(0)
+    image = PILImage.open(buffer)
+    plt.close()
+    return image
+
+def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, min_af:float = 0.0, ea_lower:int = 0, ea_upper:int = 100, scw_chain:str = 'A', scw_plddt_cutoff: int = 50, scw_min_dist_cutoff:int = 4, scw_max_dist_cutoff:int = 12, cores:int = 1, savepath: str=False) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, PILImage, PILImage, PILImage): # type: ignore
     """
     Generate AlphaFold protein structures for the given variants and save them to a specified path.
 
@@ -577,18 +691,19 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
 
     # Run SCW analysis
     # Get the protein file and save it to a temp directory
-    background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, scw_plddt_cutoff, savepath)
-    # Run analysis
-    results = []
-    for residue in [all_residues, case_vars_residues, cont_vars_residues]:
-        for dist_cutoff in range(scw_min_dist_cutoff, scw_max_dist_cutoff + 1):
-            result = _scw_analysis(pdb_path, background_resi, all_residues, scw_chain, dist_cutoff)
-            results.append(result)
-    all_output_df = pd.concat(results[0])
-    case_output_df = pd.concat(results[1])
-    cont_output_df = pd.concat(results[2])
-    # Plot results
+    plddt_background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, scw_plddt_cutoff, savepath)
+    all_background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, 0, savepath)
 
+    # Run analysis
+    all_output_df, case_output_df, cont_output_df = _parallel_scw_analysis(
+        pdb_path, all_residues, case_vars_residues, cont_vars_residues,
+        all_background_resi, plddt_background_resi, scw_chain,
+        scw_min_dist_cutoff, scw_max_dist_cutoff, scw_plddt_cutoff, cores
+    )
+    # Plot results
+    all_plot = _plot_scw_z(all_output_df, scw_plddt_cutoff)
+    case_plot = _plot_scw_z(case_output_df, scw_plddt_cutoff)
+    cont_plot = _plot_scw_z(cont_output_df, scw_plddt_cutoff)
 
     # Run if savepath is definedf
     if savepath:
@@ -601,24 +716,30 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
         # Call the protein visualizations
         _r_alphafold_structure(case_vars_collapsed, cont_vars_collapsed, new_savefile)
         # Write case residues to output file
-        with open(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'w') as f:
-            for residue in case_vars_residues:
+        with open(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'a') as f:
+            for residue in case_vars_residues['residues']:
                 residue = ''.join(filter(str.isdigit, residue))
                 f.write(f'{residue}\n')
+            f.close()
         # Write control residues to output file
         with open(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'a') as f:
-            for residue in cont_vars_residues:
+            for residue in cont_vars_residues['residues']:
                 residue = ''.join(filter(str.isdigit, residue))
                 f.write(f'{residue}\n')
+            f.close()
         # Save the SCW analysis output
         all_output_df.to_csv(os.path.join(new_savepath, f'All-Variants_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.csv'), index=False)
         case_output_df.to_csv(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.csv'), index=False)
         cont_output_df.to_csv(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.csv'), index=False)
+        # Save the PIL images
+        all_plot.save(os.path.join(new_savepath, f'All-Variants_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
+        case_plot.save(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
+        cont_plot.save(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
 
     if not savepath:
         print("No savepath provided. Skipping structure visualization.")
 
-    return case_vars_residues, cont_vars_residues
+    return all_output_df, case_output_df, cont_output_df, all_plot, case_plot, cont_plot
 
 
 #endregion

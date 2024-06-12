@@ -130,6 +130,17 @@ def _get_open_targets_gene_mapping() -> dict:
     mapping_df = _load_open_targets_mapping()
     mapping_dict = dict(zip(mapping_df['Gene stable ID'].tolist(), mapping_df['Gene name'].tolist()))
     return mapping_dict
+
+def _load_pdb_et_mapping() -> pd.DataFrame:
+    """
+    Load the PDB to Ensembl gene ID mapping data from a file and return it as a pandas DataFrame.
+
+    Returns:
+        pd.DataFrame: The mapping data with columns for PDB ID and ensgID.
+    """
+    mapping_stream = pkg_resources.resource_stream(__name__, 'data/PDB-AF_id_map.csv')
+    mapping_df = pd.read_csv(mapping_stream, sep=',')
+    return mapping_df
 #endregion
 
 #region General cleaning and formatting
@@ -265,6 +276,131 @@ def _merge_random_counts(random_counts_iterations:list) -> dict:
             else:
                 merged_counts[k] = [v]
     return merged_counts
+
+def _filter_variants(variants: pd.DataFrame, gene: str, max_af:float, min_af:float, ea_lower:float, ea_upper:float) -> (pd.DataFrame, pd.DataFrame): # type: ignore
+    """
+    Filters variants based on specified criteria.
+
+    Args:
+        variants (pd.DataFrame): DataFrame containing variant data.
+        gene (str): Gene name to filter variants for.
+        max_af (float): Maximum allele frequency threshold.
+        ea_lower (float): Lower bound of effect allele frequency.
+        ea_upper (float): Upper bound of effect allele frequency.
+
+    Returns:
+        tuple: A tuple containing two DataFrames - case_vars and cont_vars.
+            case_vars: DataFrame containing filtered variants for case samples.
+            cont_vars: DataFrame containing filtered variants for control samples.
+    """
+    if gene not in variants['gene'].unique():
+        raise ValueError(f"Gene {gene} not found in the variant data.")
+    case_vars = variants[
+        (variants['gene'] == gene) &
+        (variants['AF'] <= max_af) &
+        (variants['AF'] >= min_af) &
+        (variants['EA'] >= ea_lower) &
+        (variants['EA'] <= ea_upper) &
+        (variants['CaseControl'] == 1) &
+        (variants['HGVSp'] != '.')
+    ].reset_index(drop = True)
+    cont_vars = variants[
+        (variants['gene'] == gene) &
+        (variants['AF'] <= max_af) &
+        (variants['AF'] >= min_af) &
+        (variants['EA'] >= ea_lower) &
+        (variants['EA'] <= ea_upper) &
+        (variants['CaseControl'] == 0) &
+        (variants['HGVSp'] != '.')
+    ].reset_index(drop = True)
+    return case_vars, cont_vars
+
+def _convert_amino_acids(df:pd.DataFrame, column_name:str="SUB") -> pd.DataFrame:
+    """
+    Convert three-letter amino acid codes to single-letter codes in a DataFrame column.
+
+    Args:
+        df (pandas.DataFrame): The DataFrame containing the column to be converted.
+        column_name (str, optional): The name of the column to be converted. Defaults to "SUB".
+
+    Returns:
+        pandas.DataFrame: The DataFrame with the converted column.
+    """
+    # Create a dictionary to map three-letter codes to single-letter codes
+    aa_codes = {
+        "Ala": "A",
+        "Arg": "R",
+        "Asn": "N",
+        "Asp": "D",
+        "Cys": "C",
+        "Gln": "Q",
+        "Glu": "E",
+        "Gly": "G",
+        "His": "H",
+        "Ile": "I",
+        "Leu": "L",
+        "Lys": "K",
+        "Met": "M",
+        "Phe": "F",
+        "Pro": "P",
+        "Ser": "S",
+        "Thr": "T",
+        "Trp": "W",
+        "Tyr": "Y",
+        "Val": "V"
+    }
+    # Replace three-letter amino acid codes with single-letter codes
+    df[column_name] = df[column_name].replace(aa_codes, regex=True)
+    return df
+
+def _clean_variant_formats(variants: pd.DataFrame) -> pd.DataFrame:
+    """
+    Cleans the variant formats in the given DataFrame.
+
+    Args:
+        variants (pd.DataFrame): The DataFrame containing the variants.
+
+    Returns:
+        pd.DataFrame: The cleaned DataFrame with updated variant formats.
+    """
+    new_variants = variants.copy()
+    # Separate HGVSp into two columns
+    new_variants[['ENSP', 'SUB']] = new_variants['HGVSp'].str.split(':', expand=True)
+    # Remove leading 'p.' from SUB
+    new_variants['SUB'] = new_variants['SUB'].str.replace('p.', '')
+    # Convert three-letter amino acid codes to single-letter codes
+    new_variants = _convert_amino_acids(new_variants)
+    # Remove NA rows
+    new_variants = new_variants.dropna()
+    # Aggregate Zyg
+    new_variants = new_variants.groupby(['SUB', 'EA']).agg(
+        ENSP = ('ENSP', 'first'),
+        SUB = ('SUB', 'first'),
+        EA = ('EA', 'first'),
+        AC = ('zyg', 'sum')
+    )
+    new_variants = new_variants.reset_index(drop=True)
+    return new_variants
+
+def _check_ensp_len(ensp:list) -> bool:
+    """
+    Check if all ENSP IDs in a list have the same length.
+
+    Args:
+        ensp (list): A list of ENSP IDs.
+
+    Returns:
+        bool: True if all ENSP IDs have the same length, False otherwise.
+    """
+    if len(ensp) == 0:
+        raise ValueError("List of ENSP IDs is empty.")
+    elif len(ensp) == 1:
+        return ensp
+    elif len(ensp) > 1:
+        print(f"Multiple ENSP IDs found: {ensp}. Using {ensp[0]}")
+        return ensp
+    else:
+        return ensp
 #endregion
 
 #region STRING network functions
