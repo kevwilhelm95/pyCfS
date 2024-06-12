@@ -353,13 +353,13 @@ Parses the input VCF to create a .csv of samples and their individual variants i
 ### `lollipop_plot()`
 Generates a lollipop plot given case and control variants and tests odds ratios (for 'both' only).
 #### Parameters:
-- `variants` (pd.DataFrame): List of variants by sample. Can get from "variants_by_sample()"
+- `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to plot ("PDGFRB")
 - **Optional**:
     - `group` (str): Which side (case/control) to plot. 'both' plots case on top and controls on bottom. 'case'/'control' plots only one or the other. Default = 'both'.
     - `case_pop` (int): The number of cases in your population. If not defined, it is calculated from the input variants dataframe.
     - `cont_pop` (int): The number of controls in your population. If not defined, it is calculated from the input variants dataframe.
-    - `max_af` (float): Max allele frequency to display in the plot. Default = 1.0 or 100%
+    - `max_af` (float): Max allele frequency to display in the plot. Default = 1.0
     - `ea_lower` (float): Minimum EA score to include. Default = 0
     - `ea_upper` (float): Maximum EA score to include. Default = 100
     - `show_domains` (bool): Toggle plotting of domains in structure. Defaut = True
@@ -373,3 +373,29 @@ Generates a lollipop plot given case and control variants and tests odds ratios 
 - `float`: Odds Ratio
 - `float`: Lower Odds Ratio Confidence Interval
 - `float`: Upper Odds Ratio Confidence Interval
+
+
+### `protein_structures()`
+`Parallelized` <br>
+Generates a Pymol script to visualize variant location in 3D protein structure colored with Evolutionary Trace. Variants mapped to protein will also be tested for structural clustering using the SCW method using all variants, case variants, and control variants.
+#### Parameters:
+- `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
+- `gene` (str): Gene name that you wish to analyze ("PDGFRB")
+- **Optional**:
+    - `scw_chain` (str): Chain ID to use for AlphaFold structure. Default = "A"
+    - `scw_plddt_cutoff` (int): Minimum pLDDT confidence score to include for background analysis. Default = 50
+    - `scw_min_dist_cutoff` (int): Minimum distance to analyze clustering enrichment for. Default = 4
+    - `scw_max_dist_cutoff` (int): Maximum distance to analyze clustering enrichment for. Default = 12
+    - `max_af` (float): Max allele frequency to include. Default = 1.0
+    - `min_af` (float): Minimum allele frequency to include. Default = 0
+    - `ea_upper` (int): Maximum EA score to include. Default = 100
+    - `ea_lower` (int): Minimum EA score to include. Default = 0
+    - `cores` (int): Number of cores to include. SCW is memory intensive and may run out of memory locally if more than a few cores.
+    - `savepath` (str): Path to save. If not provided, PyMol model is not created, but SCW will run
+#### Returns: 
+- `pd.DataFrame` : Clustering enrichment for all variants meeting criteria (both cases & controls)
+- `pd.DataFrame` : Clustering enrichment for case variants meeting criteria
+- `pd.DataFrame` : Clustering enrichment for control variants meeting criteria
+- `Image` : Clustering enrichment plot for all variants meeting criteria (both cases & controls)
+- `Image` : Clustering enrichment plot for case variants meeting criteria
+- `Image` : Clustering enrichment plot for control variants meeting criteria
