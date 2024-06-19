@@ -157,8 +157,6 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
         r_cont_vars = robjects.conversion.py2rpy(cont_vars)
     # Check options
     ensp_hold = _check_ensp_len(case_vars.ENSP.unique().tolist())
-    prot_id = case_vars.loc[0, 'ENSP']
-    prot_id = _check_pdb_id(prot_id)
     if ea_color not in ['prismatic', 'gray_scale', 'EA_bin', 'black']:
         raise ValueError("ea_color must be one of 'prismatic', 'gray_scale', 'EA_bin', or 'black'")
     if ac_scale not in ['linear', 'log']:
@@ -166,39 +164,31 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
     # Create temporary directory
     temp_file = tempfile.NamedTemporaryFile(delete = False, suffix = ".png")
     plot_path = temp_file.name
-    # Create the lollipop plot
-    try: globalenv['plot'] = evotrace.LollipopPlot2(
-        variants_case = r_case_vars,
-        variants_ctrl = r_cont_vars,
-        prot_id = prot_id,
-        plot_domain = plot_domain,
-        AC_scale = ac_scale,
-        show_EA_bin = True,
-        fix_scale = True,
-        EA_color = ea_color,
-        domain_min_dist = domain_min_dist
-    )
-    except Exception as e:
-        if "missing value where TRUE/FALSE needed" in str(e):
-            print(f'ENSP ID {ensp_hold[0]} not found in PDB mapping, trying {ensp_hold[1]}')
-            try: globalenv['plot'] = evotrace.LollipopPlot2(
-                    variants_case = r_case_vars,
-                    variants_ctrl = r_cont_vars,
-                    prot_id = ensp_hold[1],
-                    plot_domain = plot_domain,
-                    AC_scale = ac_scale,
-                    show_EA_bin = True,
-                    fix_scale = True,
-                    EA_color = ea_color,
-                    domain_min_dist = domain_min_dist
-                )
-            except Exception as e:
-                print(f"RRuntimeError::{e}")
-                return PILImage.new('RGB', (1, 1))
-        else:
-            print(f"RRuntimeError::{e}")
-            return PILImage.new('RGB', (1, 1))
 
+    # Create the lollipop plot
+    for pos in ensp_hold:
+        prot_id = _check_pdb_id(pos)
+        try:
+            globalenv['plot'] = evotrace.LollipopPlot2(
+                variants_case = r_case_vars,
+                variants_ctrl = r_cont_vars,
+                prot_id = prot_id,
+                plot_domain = plot_domain,
+                AC_scale = ac_scale,
+                show_EA_bin = True,
+                fix_scale = True,
+                EA_color = ea_color,
+                domain_min_dist = domain_min_dist
+            )
+            ran = True
+            continue
+        except Exception:
+            print(f'{prot_id} does not match length of input variants')
+            ran = False
+    if ran == False:
+        print(f"No ENSP IDs match")
+        return PILImage.new('RGB', (1, 1))
+    # Save the plot
     r(f"""ggsave("{plot_path}", plot, device = "png", width = 10, height = 5, dpi = 300)""")
     # Display the plot
     lollipop_plot_plot = Image(filename=plot_path)
@@ -230,8 +220,6 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
         r_input_vars = robjects.conversion.py2rpy(input_vars)
     # Check options
     ensp_hold = _check_ensp_len(input_vars.ENSP.unique())
-    prot_id = _check_pdb_id(ensp_hold[0])
-
     # Check values
     if ea_color not in ['prismatic', 'gray_scale', 'EA_bin', 'black']:
         raise ValueError("ea_color must be one of 'prismatic', 'gray_scale', 'EA_bin', or 'black'")
@@ -242,23 +230,14 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
     temp_file = tempfile.NamedTemporaryFile(delete = False, suffix = ".png")
     plot_path = temp_file.name
 
-    # Create the lollipop plot
-    try: globalenv['plot'] = evotrace.LollipopPlot(
-        variants = r_input_vars,
-        prot_id = prot_id,
-        plot_domain = plot_domain,
-        AC_scale = ac_scale,
-        show_EA_bin = True,
-        fix_scale = True,
-        EA_color = ea_color,
-        domain_min_dist = domain_min_dist
-    )
-    except Exception as e:
-        if "missing value where TRUE/FALSE needed" in str(e):
-            print(f'ENSP ID {ensp_hold[0]} does not match protein length, trying {ensp_hold[1]}')
-            try: globalenv['plot'] = evotrace.LollipopPlot(
+    ran = False
+    for pos in ensp_hold:
+        prot_id = _check_pdb_id(pos)
+        # Create the lollipop plot
+        try:
+            globalenv['plot'] = evotrace.LollipopPlot(
                 variants = r_input_vars,
-                prot_id = ensp_hold[1],
+                prot_id = prot_id,
                 plot_domain = plot_domain,
                 AC_scale = ac_scale,
                 show_EA_bin = True,
@@ -266,12 +245,14 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
                 EA_color = ea_color,
                 domain_min_dist = domain_min_dist
             )
-            except Exception as e:
-                print(f"RRuntimeError::{e}")
-                return PILImage.new('RGB', (1, 1))
-        else:
-            print(f"RRuntimeError::{e}")
-            return PILImage.new('RGB', (1, 1))
+            ran = True
+            continue
+        except Exception:
+            print(f'{prot_id} does not match length of input variants')
+            ran = False
+    if ran == False:
+        print(f"No ENSP IDs match")
+        return PILImage.new('RGB', (1, 1))
     # Save the plot
     r(f"""ggsave("{plot_path}", plot, device = "png", width = 10, height = 5, dpi = 300)""")
     # Display the plot

@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.12.1 <br>
+Version 0.0.12.2 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -377,7 +377,7 @@ Generates a lollipop plot given case and control variants and tests odds ratios 
 
 ### `protein_structures()`
 `Parallelized` <br>
-Generates a Pymol script to visualize variant location in 3D protein structure colored with Evolutionary Trace. Variants mapped to protein will also be tested for structural clustering using the SCW method using all variants, case variants, and control variants.
+Generates a Pymol script to visualize variant location in 3D protein structure colored with Evolutionary Trace. Variants mapped to protein will also be tested for structural clustering using the SCW method [PMID: 12875851] using all variants, case variants, and control variants. 
 #### Parameters:
 - `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to analyze ("PDGFRB")
