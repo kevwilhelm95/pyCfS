@@ -368,6 +368,7 @@ def _clean_variant_formats(variants: pd.DataFrame) -> pd.DataFrame:
     new_variants[['ENSP', 'SUB']] = new_variants['HGVSp'].str.split(':', expand=True)
     # Remove leading 'p.' from SUB
     new_variants['SUB'] = new_variants['SUB'].str.replace('p.', '')
+    new_variants = new_variants[~new_variants['SUB'].str.startswith("Ter")]
     # Convert three-letter amino acid codes to single-letter codes
     new_variants = _convert_amino_acids(new_variants)
     # Remove NA rows

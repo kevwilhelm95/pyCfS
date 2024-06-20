@@ -182,8 +182,11 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
             )
             ran = True
             continue
-        except Exception:
-            print(f'{prot_id} does not match length of input variants')
+        except Exception as e:
+            if "missing value where TRUE/FALSE needed" in e:
+                print(f'{prot_id} does not match length of input variants')
+            else:
+                print(f"Error: {e}")
             ran = False
     if ran == False:
         print(f"No ENSP IDs match")
@@ -247,8 +250,11 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
             )
             ran = True
             continue
-        except Exception:
-            print(f'{prot_id} does not match length of input variants')
+        except Exception as e:
+            if "missing value where TRUE/FALSE needed" in e:
+                print(f'{prot_id} does not match length of input variants')
+            else:
+                print(f"Error: {e}")
             ran = False
     if ran == False:
         print(f"No ENSP IDs match")
