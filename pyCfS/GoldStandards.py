@@ -2300,6 +2300,28 @@ def _pull_gwas_catalog(mondo_id:str, p_upper:float) -> pd.DataFrame:
         print(f"Status code exited with error: {response.status_code}")
         raise ValueError(f"Cannot download summary statistics for {mondo_id}, please download and add the path to the table.")
 
+def _check_query_against_index(query_genes:list, ref_gene_index:list) -> list:
+    """
+    Checks if query genes are present in a reference gene index and returns a list of matching genes.
+
+    This function compares a list of query genes against a reference gene index and returns a list of genes that are present in both lists. It is useful for verifying the presence of query genes in a reference dataset.
+
+    Args:
+        query_genes (list): A list of gene symbols to query.
+        ref_gene_index (list): A list of gene symbols to reference against.
+
+    Returns:
+        list: A list of gene symbols that are present in both the query genes and the reference gene index.
+
+    Note:
+        The function performs a case-insensitive comparison of gene symbols to ensure that genes are matched accurately regardless of the case.
+    """
+    matching_genes = [gene for gene in query_genes if gene.upper() in ref_gene_index]
+    unmatched_genes = [gene for gene in query_genes if gene.upper() not in ref_gene_index]
+    if unmatched_genes:
+        print(f"The following genes were not found in the reference gene index: {', '.join(unmatched_genes)}")
+    return matching_genes
+
 def _find_snps_within_range(query_genes:list, ref_gene_index:list, geneloci:pd.DataFrame, gwasloci:pd.DataFrame, query_distance:int) -> dict:
     """
     Identifies Single Nucleotide Polymorphisms (SNPs) within a specified distance from given query genes.
@@ -2503,6 +2525,7 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     # Set parameters for colocalization
     distance_bp = distance_mbp * 1000000
     gene_locations = _load_grch38_background(just_genes=False)
+    query = _check_query_against_index(query, gene_locations.index)
     gwas_catalog = gwas_catalog[['CHR_ID', 'CHR_POS', 'MAPPED_GENE']].drop_duplicates()
     # Run colocalization for query
     print("Running query genes")
