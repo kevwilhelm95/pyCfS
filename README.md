@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.12.3 <br>
+Version 0.0.13.0 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -44,10 +44,12 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
     - `protein_family_enrichment`
     - `drug_gene_interactions`
     - `depmap_enrichment`
-- `pyCFS.Population`
+- `pyCFS.Association`
     - `variants_by_sample`
+    - `risk_prediction`
 - `pyCFS.Structure`
     - `lollipop_plot`
+    - `protein_structures`
 
 # Modules
 
@@ -332,8 +334,9 @@ Pulls drug-gene interactions in order to find potential repurposable therapies.
 
 
 
-## pyCFS.Population
+## pyCFS.Association
 ### `variants_by_sample()`
+`Parallelized` <br>
 Parses the input VCF to create a .csv of samples and their individual variants in the queried genes.
 #### Parameters:
 - `query` (list): List of genes.
@@ -345,6 +348,26 @@ Parses the input VCF to create a .csv of samples and their individual variants i
     - `savepath` (str): Path to save dataframe.
 #### Returns:
 - `pd.DataFrame` : Dataframe of parsed variants for each individual.
+
+
+### `risk_prediction`
+`Parallelized` <br>
+Takes an input feature matrix (rows = samples, columns = features) and trains, using recursive feature elimination and Bayesian hyperparameter optimization, a machine learning model to predict who is a case or a control in a left-out sample. Recursive feature elimination uses a 10-fold cross-validation to evaluate model performance. Bayesian optimization uses a 5 by 5-fold stratified cross-validation to evaluate hyperparameters. <br>
+Notes: If multiple models are input (e.g. ['RF', 'LR', 'GB']), the three models will be evaluated using cross-validation on the training samples. The best performing model of those three will be used to predict on the test samples.
+#### Parameters:
+- `feature_matrix` (pd.DataFrame): A matrix of features where samples are the rows and the features are the columns.
+- `train_samples` (pd.DataFrame): A two-column table with SampleIDs as column one and CaseControl as the second column. CaseControl should be formatted as 1 for Case and 0 for Control. These samples will be used to train the models.
+- `test_samples` (pd.DataFrame): A two-column table with SampleIDs as column one and CaseControl as the second column. CaseControl should be formatted as 1 for Case and 0 for Control. These samples will be used to evaluate the model.
+- **Optional**:
+    - `models` (list or str): Abbreviations for models to evaluate. LR = Logistic Regression. SVC = Support Vector Classifier. RF = Random Forest. GB = Gradient Boosting. XGB = Extreme Gradient Boosting. Can define using either ['RF', 'LR'] or "RF, LR". Default = RF.
+    - `rfe` (bool): Toggle to perform recursive feature elimination. Default = False
+    - `rfe_min_feature_ratio` (float): Ratio to set the minimum number of features to keep (e.g. 0.5 represents at minimum, keep 50% of the features). Default = 0.5.
+    - `cores` (int): Number of cores for parallel rfe and hyperparameter optimization. Default = 1
+    - `savepath` (str): Path to save the output files.
+#### Returns:
+- `Image`: Distribution of evaluation/test samples with calculated odds ratios
+- `Image`: Evaluation/test sample AUROC curve
+- `pd.DataFrame`: Table showing probability of case/control for evaluation/test samples.
 
 
 
