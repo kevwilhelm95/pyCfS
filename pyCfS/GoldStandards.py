@@ -1474,13 +1474,13 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
             gp1_only_dict, overlap_dict, group1_name+'Excl', 'Overlap or'+group2_name, degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_1_plot = r_gp1o_overlap[1][0]
-        show_1_z = r_gp1o_overlap[0][0]
+        show_1_z = r_gp1o_overlap[0][1][1]
         # From overlap/group 2 to group 1 exclusive
         r_overlap_gp1o = _get_results(
             overlap_dict, gp1_only_dict,'Overlap or'+group2_name, group1_name+'Excl', degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_2_plot = r_overlap_gp1o[1][0]
-        show_2_z = r_overlap_gp1o[0][0]
+        show_2_z = r_overlap_gp1o[0][1][1]
         # Record results to not write
         r_gp1o_gp2 = False
         r_gp2o_gp1 = False
@@ -1498,13 +1498,13 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
             gp2_only_dict, overlap_dict, group2_name+'Excl', 'Overlap or '+group1_name, degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_1_plot = r_gp2o_overlap[1][0]
-        show_1_z = r_gp2o_overlap[0][0]
+        show_1_z = r_gp2o_overlap[0][1][1]
         # From overlap/group 1 to group 2 exclusive
         r_overlap_gp2o = _get_results(
             overlap_dict, gp2_only_dict, 'Overlap or'+group1_name, group2_name+'Excl', degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_2_plot = r_overlap_gp2o[1][0]
-        show_2_z = r_overlap_gp2o[0][0]
+        show_2_z = r_overlap_gp2o[0][1][1]
         # Record what to save
         r_gp1o_gp2 = False
         r_gp2o_gp1 = False
@@ -1523,14 +1523,14 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_1_plot = r_gp1o_gp2o[1][0]
-        show_1_z = r_gp1o_gp2o[0][0]
+        show_1_z = r_gp1o_gp2o[0][1][1]
         # From group 2 to group 1:
         r_gp2o_gp1o = _get_results(
             gp2_only_dict, gp1_only_dict, group2_name, group1_name, show = '__SHOW_2_',
             degree_nodes = degree_nodes, other_dict = other_dict, graph_node_index = graph_node_index, graph_node = graph_node, ps = ps, cores = cores, repeat = n_iter
         )
         show_2_plot = r_gp2o_gp1o[1][0]
-        show_2_z = r_gp2o_gp1o[0][0]
+        show_2_z = r_gp2o_gp1o[0][1][1]
         # Record what to save
         r_gp1o_gp2 = False
         r_gp2o_gp1 = False
