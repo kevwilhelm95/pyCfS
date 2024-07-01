@@ -385,6 +385,7 @@ def _r_alphafold_structure(case_vars: pd.DataFrame, cont_vars: str, savepath: st
         with localconverter(robjects.default_converter + pandas2ri.converter):
             r_case_vars = robjects.conversion.py2rpy(case_vars)
             r_cont_vars = robjects.conversion.py2rpy(cont_vars)
+        prot_id = case_vars.loc[0, 'ENSP']
         # Call the structure
         evotrace.Color_Variants_AlphaFold(
             variants_case=r_case_vars,
