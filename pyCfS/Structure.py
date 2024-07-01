@@ -302,8 +302,17 @@ def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_po
     print(f"Number of controls in variant file: {cont_pop}")
     # Filter dataframe for gene and split by case and control
     case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper)
-    # Clean variant annotations
-    case_vars_collapsed, cont_vars_collapsed = _clean_variant_formats(case_vars), _clean_variant_formats(cont_vars)
+    if case_vars.empty:
+        print(f"No variants found for {gene} in case group. Using controls only")
+        group = 'control'
+        cont_vars_collapsed = _clean_variant_formats(cont_vars)
+    elif cont_vars.empty:
+        print(f"No variants found for {gene} in control group. Using cases only")
+        group = 'case'
+        case_vars_collapsed = _clean_variant_formats(case_vars)
+    else:
+        # Clean variant annotations
+        case_vars_collapsed, cont_vars_collapsed = _clean_variant_formats(case_vars), _clean_variant_formats(cont_vars)
 
     # Run lollipop_plot2 for both groups
     if group == 'both':
@@ -351,19 +360,38 @@ def _r_alphafold_structure(case_vars: pd.DataFrame, cont_vars: str, savepath: st
     _r_install_package('EvoTrace')
     _r_install_package('curl')
     evotrace = importr('EvoTrace')
-    # Convert local DataFrames to R DataFrames
-    with localconverter(robjects.default_converter + pandas2ri.converter):
-        r_case_vars = robjects.conversion.py2rpy(case_vars)
-        r_cont_vars = robjects.conversion.py2rpy(cont_vars)
-    # Check options
-    prot_id = case_vars.loc[0, 'ENSP']
-    # Call the structure
-    evotrace.Color_Variants_AlphaFold(
-        variants_case=r_case_vars,
-        variants_ctrl=r_cont_vars,
-        prot_id=prot_id,
-        pml_output=savepath
-    )
+    if case_vars.empty:
+        with localconverter(robjects.default_converter + pandas2ri.converter):
+            r_cont_vars = robjects.conversion.py2rpy(cont_vars)
+        prot_id = cont_vars.loc[0, 'ENSP']
+        # Call the structure
+        evotrace.Color_Variants_AlphaFold(
+            variants_ctrl=r_cont_vars,
+            prot_id=prot_id,
+            pml_output=savepath
+        )
+    if cont_vars.empty:
+        with localconverter(robjects.default_converter + pandas2ri.converter):
+            r_case_vars = robjects.conversion.py2rpy(case_vars)
+        prot_id = case_vars.loc[0, 'ENSP']
+        # Call the structure
+        evotrace.Color_Variants_AlphaFold(
+            variants_case=r_case_vars,
+            prot_id=prot_id,
+            pml_output=savepath
+        )
+    else:
+        # Convert local DataFrames to R DataFrames
+        with localconverter(robjects.default_converter + pandas2ri.converter):
+            r_case_vars = robjects.conversion.py2rpy(case_vars)
+            r_cont_vars = robjects.conversion.py2rpy(cont_vars)
+        # Call the structure
+        evotrace.Color_Variants_AlphaFold(
+            variants_case=r_case_vars,
+            variants_ctrl=r_cont_vars,
+            prot_id=prot_id,
+            pml_output=savepath
+        )
 
 def _prepare_resi_df(variants: pd.DataFrame) -> pd.DataFrame:
     """
@@ -483,6 +511,8 @@ def _get_plddt(prot_id:str, gene:str, chain:str, plddt_cutoff:int, savepath:str)
     # Create the save path
     if savepath:
         savepath = _fix_savepath(savepath)
+        half_pdb_path = os.path.join(savepath, f'ProteinStructures/{gene}/')
+        os.makedirs(half_pdb_path, exist_ok=True)
         pdb_path = os.path.join(savepath, f'ProteinStructures/{gene}/{gene}_AF-{af_id}.pdb')
     if not savepath:
         temp_file = tempfile.NamedTemporaryFile(delete = False, suffix = ".pdb")
@@ -522,29 +552,32 @@ def _scw_analysis(pdb_path:str, background_resi:list, residues:pd.DataFrame, cha
     _r_install_package('EvoTrace')
     evotrace = importr('EvoTrace')
 
-    # Convert Vars
-    with localconverter(robjects.default_converter + pandas2ri.converter):
-        r_vector = robjects.conversion.py2rpy(residues['residues'].unique().tolist())
-        background_resi = robjects.conversion.py2rpy(background_resi)
+    if residues.empty:
+        return pd.DataFrame()
+    else:
+        # Convert Vars
+        with localconverter(robjects.default_converter + pandas2ri.converter):
+            r_vector = robjects.conversion.py2rpy(residues['residues'].unique().tolist())
+            background_resi = robjects.conversion.py2rpy(background_resi)
 
-    # Get the background distribution
-    globalenv['background'] = evotrace.GetSCWBackgound(
-        pdb_file = pdb_path,
-        chain = chain,
-        dist_cutoff = dist_cutoff,
-        resi = background_resi
-    )
-    # Compute the Z-score
-    globalenv['z_score'] = evotrace.ComputeSCWzscore(
-        globalenv['background'],
-        resi = r_vector,
-        output_df = True
-    )
-    # Convert globalenv['z_score'] to a pandas DataFrame
-    with localconverter(robjects.default_converter + pandas2ri.converter):
-        z_score = robjects.conversion.rpy2py(globalenv['z_score'])
-        z_score['dist'] = dist_cutoff
-    return z_score
+        # Get the background distribution
+        globalenv['background'] = evotrace.GetSCWBackgound(
+            pdb_file = pdb_path,
+            chain = chain,
+            dist_cutoff = dist_cutoff,
+            resi = background_resi
+        )
+        # Compute the Z-score
+        globalenv['z_score'] = evotrace.ComputeSCWzscore(
+            globalenv['background'],
+            resi = r_vector,
+            output_df = True
+        )
+        # Convert globalenv['z_score'] to a pandas DataFrame
+        with localconverter(robjects.default_converter + pandas2ri.converter):
+            z_score = robjects.conversion.rpy2py(globalenv['z_score'])
+            z_score['dist'] = dist_cutoff
+        return z_score
 
 def _scw_analysis_task(pdb_path:str, background_resi:pd.DataFrame, residue:pd.DataFrame, scw_chain:str, dist_cutoff:int, annotate_background:str) -> pd.DataFrame:
     """
@@ -668,13 +701,38 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
     """
     # Separate into case and control variants
     case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper)
-    # Clean variant annotations
-    case_vars_collapsed, cont_vars_collapsed = _clean_variant_formats(case_vars), _clean_variant_formats(cont_vars)
-    prot_id = case_vars.loc[0, 'ENSP']
-    prot_id = _check_pdb_id(prot_id)
-    gene = case_vars.loc[0, 'gene']
-    case_vars_residues, cont_vars_residues = _prepare_resi_df(case_vars_collapsed), _prepare_resi_df(cont_vars_collapsed)
-    all_residues = pd.concat([case_vars_residues, cont_vars_residues])
+    if case_vars.empty:
+        print(f"No variants found for {gene} in case group. Using controls only")
+        cont_vars_collapsed = _clean_variant_formats(cont_vars)
+        cont_vars_residues = _prepare_resi_df(cont_vars_collapsed)
+        all_residues = pd.DataFrame()
+        case_vars_collapsed = pd.DataFrame()
+        case_vars_residues = pd.DataFrame()
+        # Get the Protein ID
+        prot_id = cont_vars.loc[0, 'ENSP']
+        prot_id = _check_pdb_id(prot_id)
+        gene = cont_vars.loc[0, 'gene']
+    elif cont_vars.empty:
+        print(f"No variants found for {gene} in control group. Using cases only")
+        case_vars_collapsed = _clean_variant_formats(case_vars)
+        case_vars_residues = _prepare_resi_df(case_vars_collapsed)
+        all_residues = pd.DataFrame()
+        cont_vars_collapsed = pd.DataFrame()
+        cont_vars_residues = pd.DataFrame()
+        # Get the Protein ID
+        prot_id = case_vars.loc[0, 'ENSP']
+        prot_id = _check_pdb_id(prot_id)
+        gene = case_vars.loc[0, 'gene']
+    else:
+        # Clean variant annotations
+        case_vars_collapsed, cont_vars_collapsed = _clean_variant_formats(case_vars), _clean_variant_formats(cont_vars)
+        case_vars_residues, cont_vars_residues = _prepare_resi_df(case_vars_collapsed), _prepare_resi_df(cont_vars_collapsed)
+        all_residues = pd.concat([case_vars_residues, cont_vars_residues])
+        # Get the Protein ID
+        prot_id = case_vars.loc[0, 'ENSP']
+        prot_id = _check_pdb_id(prot_id)
+        gene = case_vars.loc[0, 'gene']
+
 
     # Run SCW analysis
     # Get the protein file and save it to a temp directory
@@ -688,9 +746,18 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
         scw_min_dist_cutoff, scw_max_dist_cutoff, scw_plddt_cutoff, cores
     )
     # Plot results
-    all_plot = _plot_scw_z(all_output_df, scw_plddt_cutoff)
-    case_plot = _plot_scw_z(case_output_df, scw_plddt_cutoff)
-    cont_plot = _plot_scw_z(cont_output_df, scw_plddt_cutoff)
+    if not all_output_df.empty:
+        all_plot = _plot_scw_z(all_output_df, scw_plddt_cutoff)
+    else:
+        all_plot = PILImage.new('RGB', (1, 1))
+    if not case_output_df.empty:
+        case_plot = _plot_scw_z(case_output_df, scw_plddt_cutoff)
+    else:
+        case_plot = PILImage.new('RGB', (1, 1))
+    if not cont_output_df.empty:
+        cont_plot = _plot_scw_z(cont_output_df, scw_plddt_cutoff)
+    else:
+        cont_plot = PILImage.new('RGB', (1, 1))
 
     # Run if savepath is definedf
     if savepath:
@@ -703,25 +770,30 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
         # Call the protein visualizations
         _r_alphafold_structure(case_vars_collapsed, cont_vars_collapsed, new_savefile)
         # Write case residues to output file
-        with open(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'a') as f:
-            for residue in case_vars_residues['residues']:
-                residue = ''.join(filter(str.isdigit, residue))
-                f.write(f'{residue}\n')
-            f.close()
+        if not case_vars_residues.empty:
+            with open(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'a') as f:
+                for residue in case_vars_residues['residues']:
+                    residue = ''.join(filter(str.isdigit, residue))
+                    f.write(f'{residue}\n')
+                f.close()
         # Write control residues to output file
-        with open(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'a') as f:
-            for residue in cont_vars_residues['residues']:
-                residue = ''.join(filter(str.isdigit, residue))
-                f.write(f'{residue}\n')
-            f.close()
+        if not cont_vars_residues.empty:
+            with open(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_residues.txt'), 'a') as f:
+                for residue in cont_vars_residues['residues']:
+                    residue = ''.join(filter(str.isdigit, residue))
+                    f.write(f'{residue}\n')
+                f.close()
         # Save the SCW analysis output
         all_output_df.to_csv(os.path.join(new_savepath, f'All-Variants_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.csv'), index=False)
         case_output_df.to_csv(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.csv'), index=False)
         cont_output_df.to_csv(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.csv'), index=False)
         # Save the PIL images
-        all_plot.save(os.path.join(new_savepath, f'All-Variants_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
-        case_plot.save(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
-        cont_plot.save(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
+        if not all_output_df.empty:
+            all_plot.save(os.path.join(new_savepath, f'All-Variants_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
+        if not case_output_df.empty:
+            case_plot.save(os.path.join(new_savepath, f'Cases_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
+        if not cont_output_df.empty:
+            cont_plot.save(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
 
     if not savepath:
         print("No savepath provided. Skipping structure visualization.")
