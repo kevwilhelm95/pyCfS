@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.14.0 <br>
+Version 0.0.14.1 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -47,6 +47,8 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
 - `pyCFS.Association`
     - `variants_by_sample`
     - `risk_prediction`
+    - `odds_ratios`
+    - `ea_distributions`
 - `pyCFS.Structure`
     - `lollipop_plot`
     - `protein_structures`

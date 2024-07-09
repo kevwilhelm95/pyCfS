@@ -144,6 +144,46 @@ def _load_pdb_et_mapping() -> pd.DataFrame:
 #endregion
 
 #region General cleaning and formatting
+def _validate_ea_thresh(ea_lower:int, ea_upper:int) -> None:
+    """
+    Validates the lower and upper thresholds for effect size.
+
+    Args:
+        ea_lower (int): The lower threshold for effect size.
+        ea_upper (int): The upper threshold for effect size.
+
+    Raises:
+        ValueError: If the lower threshold is greater than the upper threshold,
+                    or if the lower threshold is less than 0,
+                    or if the upper threshold is greater than 100.
+    """
+    if ea_lower > ea_upper:
+        raise ValueError("Lower threshold cannot be greater than the upper threshold.")
+    if ea_lower < 0:
+        raise ValueError("Lower threshold cannot be less than 0.")
+    if ea_upper > 100:
+        raise ValueError("Upper threshold cannot be greater than 100.")
+
+def _validate_af_thresh(af_lower:float, af_upper:float) -> None:
+    """
+    Validates the allele frequency thresholds.
+
+    Args:
+        af_lower (float): The lower threshold for allele frequency.
+        af_upper (float): The upper threshold for allele frequency.
+
+    Raises:
+        ValueError: If the lower threshold is greater than the upper threshold.
+        ValueError: If the lower threshold is less than 0.
+        ValueError: If the upper threshold is greater than 1.
+    """
+    if af_lower > af_upper:
+        raise ValueError("Lower threshold cannot be greater than the upper threshold.")
+    if af_lower < 0:
+        raise ValueError("Lower threshold cannot be less than 0.")
+    if af_upper > 1:
+        raise ValueError("Upper threshold cannot be greater than 1.")
+
 def _define_background_list(background_:Any, just_genes: bool = True) -> (dict, str): # type: ignore
     """
     Defines the background list based on the input background parameter.
