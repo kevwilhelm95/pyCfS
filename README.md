@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.13.2 <br>
+Version 0.0.14.0 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -368,6 +368,47 @@ Notes: If multiple models are input (e.g. ['RF', 'LR', 'GB']), the three models 
 - `Image`: Distribution of evaluation/test samples with calculated odds ratios
 - `Image`: Evaluation/test sample AUROC curve
 - `pd.DataFrame`: Table showing probability of case/control for evaluation/test samples.
+
+### `odds_ratios` under work
+`Parallelized` <br>
+Takes the variants_by_sample output and performs odds ratio calculations based on allelic counts between two sets of patients. We recommend performing variant-based calculations on variants with an allele frequency > 1%, as more rare variants will be underpowered. We recommend performing gene-based and domain-based calculations on variants with allele frequency < 1%, as common variants can confound the signal. 
+#### Parameters:
+- `variants_by_sample` (pd.DataFrame): Output from the variants_by_sample function.
+- `samples` (pd.DataFrame): Two-column dataframe for samples to calculate odds ratios on. First column = sample_ids. Second column = CaseControl (1/0).
+- `genes` (list): List of genes to analyze
+- **Optional**:
+    - `model` (str): Model to calculate odds ratios. Options = ['dominant', 'recessive']. Dominant model includes both heterozygous and homozygous variants. Recessive model only analyzes homozygous variants. Default = 'dominant'
+    - `level` (str): Level of analysis. Options = ['variant', 'gene', 'domain']. Variant analyzes variant-by-variant. Gene analyzes gene-collapsed odds ratios. Domain analyzes protein-domains annotated by Evidence and Conclusion Ontology (ECO). Default = 'variant'.
+    - `ea_lower` (int): Minimum EA score for variants to include. Default = 0.
+    - `ea_upper` (int): Maximum EA score for variants to include. Default = 100.
+    - `min_af` (float): Minimum allele frequency to include. Default = 0.0.
+    - `max_af` (float): Maximum allele frequency to include. Default = 1.0.
+    - `significance_level` (float): FDR threshold to be considered "significant" for results plot. Default = 0.1
+    - `show_plot_labels` (bool): Toggle to show result plot labels for significant findings. Default = True.
+    - `cores` (int): Number of cores for parallelization. Default = 1.
+    - `savepath` (str): Path for saving.
+#### Returns:
+- `pd.DataFrame`: Aggregated counts of variants transformed from the variants_by_sample output. Note: The output is filtered according to the optional parameters above (e.g. if max_af = 0.01, the dataframe will only contain aggregated variant counts for variants with AF < 1%).
+- `pd.DataFrame`: Table of resulting odds ratios calculated, their p-values, and FDR corrections.
+- `Image`: Odds ratio scatter plot of analyzed genomic objects.
+
+
+### `ea_distributions`
+Takes the odds_ratio output dataframe and tests EA score distribution, using the Kolmogorov-Smirnov test, differences within a gene for two sets of patients.
+#### Parameters:
+- `variants_or` (pd.DataFrame): Aggregated variants output from odds_ratios()
+- `genes` (list): List of genes to analyze EA distributions.
+- **Optional**:
+    - `min_vars` (int): Minimum number of variants needed to analyze distributions.
+    - `distribution` (str): Method of counting EA scores. Options = ['non_degenerate', 'degenerate']. Non_degenerate expands EA scores by the allele count in cases and controls. Degenerate only records one EA score if any sample has the variant. Default = 'non_degenerate'.
+    - `consequence` (str): Regex pattern to filter variants for their consequences. Default = 'missense_variant|frameshift_variant|stop_gained".
+    - `min_af` (float): Minimum allele frequency for variants. Default = 0.0.
+    - `max_af` (float): Maximum allele frequency for variants. Default = 1.0.
+    - `savepath` (str): Path for saving. Default = None.
+#### Returns:
+- `pd.DataFrame`: Table of p-values for KS test results
+- `dict`: Dictionary of resulting EA score distribution plots. Can be accessed using out_dict[gene_name].
+
 
 
 

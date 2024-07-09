@@ -24,14 +24,18 @@ from sklearn.feature_selection import RFE, RFECV
 
 import numpy as np
 import statsmodels.api as sm
-from scipy.stats import ks_2samp
+from scipy.stats import ks_2samp, fisher_exact
 import math
 import matplotlib.pyplot as plt
+from statsmodels.stats.multitest import multipletests
 import io
+from adjustText import adjust_text
 import joblib
+import multiprocessing as mp
+import re
 from PIL import Image
 import os
-from .utils import _load_grch38_background, _fix_savepath
+from .utils import _load_grch38_background, _fix_savepath, _load_pdb_et_mapping, _validate_ea_thresh, _validate_af_thresh
 
 # Ignore machine learning warnings
 import warnings
@@ -88,7 +92,7 @@ def _fetch_ea_vep(ea:tuple, canon_ensp:str, all_ensp:tuple, csq:str, ea_parser:s
     Returns:
         Any: The EA VEP score based on the given parameters.
     """
-    if 'stop_gained' in csq or 'frameshift_variant' in csq or 'stop_lost' in csq or 'splice_donor_variant' in csq or 'splice_acceptor_variant' in csq:
+    if 'stop_gained' in csq or 'frameshift_variant' in csq or 'stop_lost' in csq:
         return 100
     if ea_parser == 'canonical':
         try:
@@ -110,7 +114,7 @@ def _fetch_ea_vep(ea:tuple, canon_ensp:str, all_ensp:tuple, csq:str, ea_parser:s
         else:
             return new_ea
 
-def _convert_zygo(genotype:tuple) -> int:
+def _convert_zygo(genotype:tuple) -> (int, int): # type: ignore
     """
     Convert a genotype tuple to a zygosity integer
     Args:
@@ -120,11 +124,27 @@ def _convert_zygo(genotype:tuple) -> int:
     """
     if genotype in [(1, 0), (0, 1)]:
         zygo = 1
+        an = 2
+    elif genotype in [(1, None), (None, 1)]:
+        zygo = 1
+        an = 1
     elif genotype == (1, 1):
         zygo = 2
-    else:
+        an = 2
+    elif genotype == (0,0):
         zygo = 0
-    return zygo
+        an = 2
+    elif genotype in [(0, None), (None, 0)]:
+        zygo = 0
+        an = 1
+    elif genotype == (None, None):
+        zygo = 0
+        an = 0
+    else:
+        print(genotype)
+        zygo = 0
+        an = 0
+    return zygo, an
 
 def _parse_vep(vcf_fn:str, gene:str, gene_ref:pd.DataFrame, samples:list, ea_parser:str) -> pd.DataFrame:
     """
@@ -148,10 +168,13 @@ def _parse_vep(vcf_fn:str, gene:str, gene_ref:pd.DataFrame, samples:list, ea_par
     # Get the contig type
     contig_prefix = 'chr' if 'chr' in next(vcf).chrom else ''
     contig = contig_prefix + gene_ref.chrom
-    row = []
+    rows = []
     for rec in vcf.fetch(contig=contig, start=gene_ref.start, stop=gene_ref.end):
+        total_an = 0
+        sample_rows = []
         for sample in samples:
-            zyg = _convert_zygo(rec.samples[sample]['GT'])
+            zyg, an = _convert_zygo(rec.samples[sample]['GT'])
+            total_an += an
             rec_gene = _fetch_anno(rec.info['SYMBOL'])
             if (zyg!=0) and (rec_gene == gene):
                 all_ea = rec.info.get('EA', (None,))
@@ -161,7 +184,7 @@ def _parse_vep(vcf_fn:str, gene:str, gene_ref:pd.DataFrame, samples:list, ea_par
                 csq = _fetch_anno(rec.info['Consequence'])
                 ea = _fetch_ea_vep(all_ea, canon_ensp, all_ensp, csq, ea_parser=ea_parser)
                 if not np.isnan(ea):
-                    row.append(
+                    sample_rows.append(
                         [
                             canon_ensp,
                             rec.chrom,
@@ -177,9 +200,13 @@ def _parse_vep(vcf_fn:str, gene:str, gene_ref:pd.DataFrame, samples:list, ea_par
                             rec.info['AF'][0]
                         ]
                     )
-    cols = ['ENSP', 'chr','pos','ref','alt', 'HGVSp', 'Consequence', 'EA','gene','sample','zyg','AF']
+        # Append the AN to all samples
+        for row in sample_rows:
+            row.append(total_an)
+            rows.append(row)
+    cols = ['ENSP', 'chr','pos','ref','alt', 'HGVSp', 'Consequence', 'EA','gene','sample','zyg','AF', 'AN_Cohort']
     col_type = {'chr': str, 'pos': str, 'ref': str, 'alt': str, 'sample':int, 'EA':float, 'zyg':int, 'AF':float}
-    df = pd.DataFrame(row, columns = cols)
+    df = pd.DataFrame(rows, columns = cols)
     df = df.astype(col_type)
     return df
 
@@ -198,20 +225,32 @@ def variants_by_sample(query:list, vcf_path:str, samples:pd.DataFrame, transcrip
         pd.DataFrame: DataFrame containing the design matrix of variants for the specified genes and samples.
     """
     # Get the sample IDs you are interested in
-    sample_ids = samples.SampleID.astype(str).tolist()
+    cases = samples.loc[samples.iloc[:,1] == 1]
+    controls = samples.loc[samples.iloc[:,1] == 0]
+    case_ids = cases.iloc[:, 0].astype(str).tolist()
+    control_ids = controls.iloc[:, 0].astype(str).tolist()
     # Get the gene positions
     gene_positions = _load_grch38_background(just_genes = False)
     gene_positions = gene_positions.loc[gene_positions.index.isin(query)]
 
     # Parse the VCF for variants of interest
-    gene_dfs = Parallel(n_jobs=cores)(delayed(_parse_vep)(
+    case_gene_dfs = Parallel(n_jobs=cores)(delayed(_parse_vep)(
          vcf_fn=vcf_path,
          gene = gene,
          gene_ref = gene_positions.loc[gene],
-         samples=sample_ids,
+         samples=case_ids,
          ea_parser=transcript
     ) for gene in tqdm(gene_positions.index.unique()))
-    design_matrix = pd.concat(gene_dfs, axis=0)
+    control_gene_dfs = Parallel(n_jobs=cores)(delayed(_parse_vep)(
+            vcf_fn=vcf_path,
+            gene = gene,
+            gene_ref = gene_positions.loc[gene],
+            samples=control_ids,
+            ea_parser=transcript
+        ) for gene in tqdm(gene_positions.index.unique()))
+    case_design = pd.concat(case_gene_dfs, axis=0)
+    control_design = pd.concat(control_gene_dfs, axis=0)
+    design_matrix = pd.concat([case_design, control_design], axis=0)
 
     # Map the Sample IDs to CaseControl
     design_matrix = design_matrix.merge(samples, left_on='sample', right_on='SampleID', how='left')
@@ -226,8 +265,6 @@ def variants_by_sample(query:list, vcf_path:str, samples:pd.DataFrame, transcrip
 
     return design_matrix
 #endregion
-
-
 
 
 #region risk_prediction
@@ -1108,24 +1145,638 @@ def risk_prediction(feature_matrix: pd.DataFrame, train_samples: pd.DataFrame, t
 
 
 #region odds_ratios
+def _validate_or_method(method: str) -> None:
+    """
+    Validates the input method for association analysis.
 
+    Args:
+        method (str): The method to be validated.
 
-def _run_exact_test(vcf_path:str):
-    x =1 
+    Raises:
+        ValueError: If the method is not one of ['variant', 'domain', 'gene'].
 
-def odds_ratios(vcf_path: str, genes:list, samples: pd.DataFrame, cores: int, savepath: str = None):
+    Returns:
+        None
+    """
+    if method not in ['variant', 'domain', 'gene']:
+        raise ValueError("Invalid method. Please choose from 'variant', 'domain', or 'gene'.")
 
+def _validate_model(model: str) -> None:
+    """
+    Validates the model parameter.
+
+    Args:
+        model (str): The model to be validated.
+
+    Raises:
+        ValueError: If the model is not 'dominant' or 'recessive'.
+    """
+    if model not in ['dominant', 'recessive']:
+        raise ValueError("Invalid model. Please choose from 'dominant' or 'recessive'.")
+
+def _check_af_filters(af_min: float, af_max:float, method:str) -> None:
+    """
+    Checks the allele frequency filters for the exact test.
+
+    Args:
+        exact_test (pd.DataFrame): The DataFrame containing the exact test results.
+        af_min (float): The minimum allele frequency.
+        af_max (float): The maximum allele frequency.
+        method (str): The method used for association analysis.
+
+    Raises:
+        ValueError: If the allele frequency filters are invalid.
+    """
+    if method == 'variant' and af_min < 0.01:
+            print("WARNING: Minimum allele frequency is less than 1%. This may result in many underpowered variants being tested, leading to a stringent FDR.")
+    elif method in ['domain', 'gene'] and af_max > 0.01:
+            print("WARNING: Maximum allele frequency is greater than 1%. This may result in an Exact Test error due to allele number calculations. We suggest lowering the max_af to 0.01.")
+
+def _parse_domains(row: pd.Series) -> list:
+    """
+    Parses the domain information from a given row in a pandas Series object.
+
+    Args:
+        row (pd.Series): The row containing the domain information.
+
+    Returns:
+        list: A list of dictionaries, where each dictionary represents a parsed domain.
+              Each dictionary contains the following keys:
+              - 'ENSP': The protein ID.
+              - 'domain_start': The start position of the domain.
+              - 'domain_end': The end position of the domain.
+              - 'domain_name': The name of the domain.
+    """
+    ensp = row.prot_id.split('.')[0]
+    if "ENSP" not in ensp:
+        return []
+    domain_info = row.domain
+    if not isinstance(domain_info, str):
+        return []
+    # Adjusted regular expression to match domain annotations
+    domain_pattern = re.compile(r'DOMAIN (\d+)\.\.(\d+); /note=(".*?"|""".*?""");')
+    # Find all matches
+    matches = domain_pattern.findall(domain_info)
+    parsed_domains = []
+    for match in matches:
+        domain_start, domain_end, domain_name = match
+        domain_name = domain_name.strip('"')
+        parsed_domains.append({
+            'ENSP': ensp,
+            'domain_start': int(domain_start),
+            'domain_end': int(domain_end),
+            'domain_name': domain_name
+        })
+
+    return parsed_domains
+
+def _extract_aa_pos_value(hgvsp: str) -> Any:
+    """
+    Extracts the amino acid position value from the given HGVSp string.
+
+    Args:
+        hgvsp (str): The HGVSp string from which to extract the amino acid position value.
+
+    Returns:
+        int or None: The extracted amino acid position value if found, otherwise None.
+    """
+    match = re.search(r'[A-Za-z]{3}(\d+)[A-Za-z]{3}', hgvsp)
+    if match:
+        return int(match.group(1))
+    return None
+
+def _annotate_domain_region(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Annotates the given DataFrame with domain information based on variant positions.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame containing variant information.
+
+    Returns:
+        pd.DataFrame: The annotated DataFrame with domain information.
+
+    """
+    # Load domain information
+    domain_info = _load_pdb_et_mapping()
+    # Create a Protein position column
+    df['aa_pos'] = df['HGVSp'].apply(_extract_aa_pos_value)
+    # Parse the domain info
+    parsed_domains = [domain for index, row in domain_info.iterrows() for domain in _parse_domains(row)]
+    parsed_domains_df = pd.DataFrame(parsed_domains)
+    # Annotate the dataframe with domains if the variant is in the correct position
+    merged_df = pd.merge(df, parsed_domains_df, on='ENSP', how='left')
+    # Determine if aa_pos is within the domain range
+    merged_df['within_domain'] = merged_df.apply(lambda row: row['domain_start'] <= row['aa_pos'] <= row['domain_end'] if pd.notnull(row['domain_start']) else False, axis=1)
+    # Annotate domain names, and keep only the required annotations
+    merged_df['domain_name'] = merged_df.apply(lambda row: row['domain_name'] if row['within_domain'] else None, axis=1)
+    # Annotated domain region
+    merged_df['domain_annotation'] = merged_df.apply(
+        lambda row: f"{row['gene']}_{row['domain_name']} (aa{int(row['domain_start'])} - {int(row['domain_end'])})" if row['within_domain'] else None, axis=1)
+    # Prioritize rows with domain annotations
+    merged_df = merged_df.sort_values(by='domain_annotation', na_position='last')
+    # Drop unnecessary columns
+    final_df = merged_df.drop(columns=['domain_start', 'domain_end', 'within_domain', 'domain_name']).drop_duplicates(subset=['chr', 'pos', 'ref', 'alt', 'gene', 'ENSP', 'aa_pos'])
+    return final_df
+
+def _transform_vbysample_to_exact_test(variants_by_sample: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforms the variants by sample DataFrame to perform an exact test.
+
+    Args:
+        variants_by_sample (pd.DataFrame): DataFrame containing variants by sample information.
+
+    Returns:
+        pd.DataFrame: Transformed DataFrame with aggregated variant counts.
+
+    """
+    # Remove non-HGVSp (non-coding) variants
+    variants_by_sample = variants_by_sample[variants_by_sample['HGVSp'] != '.']
+    # Define allele count aggregation functions
+    def max_case_an(x: pd.Series) -> int:
+        """
+        Returns the maximum value of 'AN_Cohort' from the 'variants_by_sample' DataFrame
+        for the indices where 'x' is equal to 1.
+
+        Parameters:
+        - x: pandas Series or DataFrame
+            The input series or dataframe containing values equal to 1.
+
+        Returns:
+        - int or float
+            The maximum value of 'AN_Cohort' for the indices where 'x' is equal to 1.
+        """
+        return variants_by_sample.loc[x.index, 'AN_Cohort'][x == 1].max()
+
+    def max_control_an(x: pd.Series) -> int:
+        """
+        Returns the maximum value of 'AN_Cohort' from the 'variants_by_sample' DataFrame
+        for the indices where the input series 'x' is equal to 0.
+
+        Parameters:
+        x (pd.Series): Input series to filter the 'AN_Cohort' values.
+
+        Returns:
+        int: Maximum value of 'AN_Cohort' for the filtered indices.
+        """
+        return variants_by_sample.loc[x.index, 'AN_Cohort'][x == 0].max()
+
+    aggregation_functions = {
+        'Case_All_AC': (
+            'CaseControl', lambda x: ((x == 1) & (variants_by_sample['zyg'] == 1)).sum() + ((x == 1) & (variants_by_sample['zyg'] == 2)).sum() * 2
+        ),
+        'Case_Homozygote_AC': (
+            'CaseControl', lambda x: ((x == 1) & (variants_by_sample['zyg'] == 2)).sum()*2
+        ),
+        'Case_Heterozygote_AC': (
+            'CaseControl', lambda x: ((x == 1) & (variants_by_sample['zyg'] == 1)).sum()
+        ),
+        'Control_All_AC': (
+            'CaseControl', lambda x: ((x == 0) & (variants_by_sample['zyg'] == 1)).sum() + ((x == 0) & (variants_by_sample['zyg'] == 2)).sum() * 2
+        ),
+        'Control_Homozygote_AC': (
+            'CaseControl', lambda x: ((x == 0) & (variants_by_sample['zyg'] == 2)).sum()*2
+        ),
+        'Control_Heterozygote_AC': (
+            'CaseControl', lambda x: ((x == 0) & (variants_by_sample['zyg'] == 1)).sum()
+        ),
+        'Case_AN': (
+            'CaseControl', max_case_an
+        ),
+        'Control_AN': (
+            'CaseControl', max_control_an
+        )
+    }
+    # Aggregate by sample counts into variant counts
+    agg_df = variants_by_sample.groupby('HGVSp').agg(**aggregation_functions).reset_index()
+    # Merge back with original data
+    variants_sub = variants_by_sample.drop(columns = ['sample', 'CaseControl', 'zyg']).drop_duplicates()
+    agg_df = pd.merge(agg_df, variants_sub, on='HGVSp', how='left')
+    # Select columns of interest
+    agg_df = agg_df[['chr', 'pos', 'ref', 'alt', 'gene', 'ENSP', 'Consequence', 'HGVSp', 'EA', 'AF', 'Case_All_AC', 'Case_Homozygote_AC', 'Case_Heterozygote_AC', 'Control_All_AC', 'Control_Homozygote_AC', 'Control_Heterozygote_AC', 'Case_AN', 'Control_AN']]
+    agg_df = agg_df.drop_duplicates()
+    return agg_df
+
+def _or_fdr(or_matrix: pd.DataFrame) -> pd.DataFrame:
+    """
+    Applies the False Discovery Rate (FDR) correction to the p-values in the input DataFrame.
+
+    Args:
+        or_matrix (pd.DataFrame): A DataFrame containing the odds ratio (OR) values and p-values.
+
+    Returns:
+        pd.DataFrame: The input DataFrame with an additional column 'qvalue' representing the FDR-corrected p-values.
+
+    """
+    or_matrix = or_matrix.sort_values(by=['pvalue'], ascending=True)
+    pvals = list(or_matrix['pvalue'])
+    if len(pvals) != 0:
+        qvals = multipletests(pvals, alpha=0.05, method='fdr_bh', is_sorted=True)[1]
+        or_matrix['qvalue'] = qvals
+    return or_matrix
+
+def _perform_or(exact_test_df: pd.DataFrame, iterable: str, it_column:str, model_column:str) -> pd.DataFrame:
+    """
+    Perform odds ratio calculation and confidence interval estimation for a given iterable.
+
+    Args:
+        exact_test_df (pd.DataFrame): DataFrame containing the exact test data.
+        iterable (str): The iterable to perform the odds ratio calculation for.
+        it_column (str): The column in `exact_test_df` that contains the iterable values.
+        model_column (str): The column in `exact_test_df` that contains the model values.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the odds ratio, confidence intervals, p-value, and counts.
+
+    """
+    # Get the iterable
+    sub_df = exact_test_df[exact_test_df[it_column] == iterable].reset_index(drop=True)
+    # Get allele counts in cases and controls
+    case_with = int(sum(sub_df[f'Case{model_column}']))
+    control_with = int(sum(sub_df[f'Control{model_column}']))
+    if model_column == 'HGVSp':
+        case_without = math.floor(np.mean(sub_df['Case_AN']) - case_with)
+        control_without = math.floor(np.mean(sub_df['Control_AN']) - control_with)
+    else:
+        case_without = int(sub_df['Case_AN'].sum() - case_with)
+        control_without = int(sub_df['Control_AN'].sum() - control_with)
+
+    # Perform odds ratio calculation
+    try:
+        oddsratio, pvalue = fisher_exact(
+            [[case_with, control_with],
+            [case_without, control_without]]
+        )
+    except ValueError as e:
+        e = str(e)
+        if "nonnegative" in e:
+            print("WARNING: Unable to calculate odds ratio due to negative allele number values. This is due to allele frequency issues. Please decrease the max_af threshold to 0.01.")
+        elif "zero" in e:
+            print("WARNING: Unable to calculate odds ratio due to zero allele number values.")
+        else:
+            print("WARNING: Unable to calculate odds ratio.")
+        output = pd.DataFrame({
+            'genomic_object': [iterable],
+            'OR': [np.nan],
+            'LowerCI': [np.nan],
+            'UpperCI': [np.nan],
+            'AC_case_with': [np.nan],
+            'AC_control_with': [np.nan],
+            'AC_case_without': [np.nan],
+            'AC_control_without': [np.nan],
+            'pvalue': [np.nan]
+        })
+        return output
+
+    # Invert OR if AF > 0.5 because its actually not the variant but the reference allele
+    if (it_column == 'HGVSp') and (sub_df.loc[0, 'AF'] >= 0.5):
+        try:
+            oddsratio = 1/oddsratio
+            a = control_with
+            b = case_with
+            c = control_without
+            d = case_without
+        except ZeroDivisionError: oddsratio = np.nan
+    else:
+        a = case_with
+        b = control_with
+        c = case_without
+        d = control_without
+     # Calculate CIs
+    if np.sum(case_with) == 0 or np.sum(control_with) == 0 or case_without == 0 or control_without == 0:
+        upper_ci = np.nan
+        lower_ci = np.nan
+    else:
+        upper_ci = np.exp(
+            np.log(oddsratio) + 1.96*np.sqrt((1/np.sum(a)) + (1/np.sum(b)) + (1/c) + (1/d)))
+        lower_ci = np.exp(
+            np.log(oddsratio) - 1.96*np.sqrt((1/np.sum(a)) + (1/np.sum(b)) + (1/c) + (1/d)))
+        upper_ci = round(upper_ci, 3)
+        lower_ci = round(lower_ci, 3)
+    # Create output matrix
+    output = pd.DataFrame({
+        'genomic_object': [iterable],
+        'OR': [oddsratio],
+        'LowerCI': [lower_ci],
+        'UpperCI': [upper_ci],
+        'n_case_with': [case_with],
+        'n_control_with': [control_with],
+        'n_case_without': [case_without],
+        'n_control_without': [control_without],
+        'pvalue': [pvalue]
+    })
+    return output
+
+def _parallel_or(exact_test_df: pd.DataFrame, iterable: list, it_column:str, model_column: str, cores: int) -> pd.DataFrame:
+    """
+    Perform parallelized OR calculation for each item in the iterable.
+
+    Args:
+        exact_test_df (pd.DataFrame): The DataFrame containing the exact test results.
+        iterable (list): The list of items to iterate over.
+        it_column (str): The column name in the DataFrame representing the iterable.
+        model_column (str): The column name in the DataFrame representing the model.
+        cores (int): The number of CPU cores to use for parallelization.
+
+    Returns:
+        pd.DataFrame: The DataFrame containing the calculated OR values.
+
+    """
+    # Set up the parallelization
+    args_ = tuple(zip(
+        [exact_test_df]*len(iterable),
+        iterable,
+        [it_column] * len(iterable),
+        [model_column]*len(iterable)
+    ))
+    pool = mp.Pool(processes = cores)
+    output = pool.starmap(_perform_or, args_)
+    pool.close()
+    pool.join()
+    output = pd.concat(output)
+    output = _or_fdr(output)
+    return output
+
+def _plot_or(or_df: pd.DataFrame, sig_level: float, show_plot_labels: bool, text_col:str) -> Image:
+    """
+    Plot Odds Ratio data.
+
+    Args:
+        or_df (pd.DataFrame): DataFrame containing Odds Ratio data.
+        sig_level (float): Significance level.
+        show_plot_labels (bool): Whether to show text labels for points of interest.
+        text_col (str): Column name in the DataFrame to be used as text labels.
+
+    Returns:
+        Image: The plotted image.
+
+    """
+    # Create plotting matrices
+    if text_col == 'HGVSp':
+        or_df[['ENSP', 'variant']] = or_df['genomic_object'].str.split(':', expand=True)
+        or_df['genomic_object'] = or_df['gene'] + ':' + or_df['variant']
+    or_df_sort = or_df.sort_values(by='OR', ascending=True).reset_index(drop=True)
+    sig_pos_matrix = or_df_sort[(or_df_sort['OR'] > 1) & (or_df_sort['qvalue'] <= sig_level)]
+    sig_neg_matrix = or_df_sort[(or_df_sort['OR'] < 1) & (or_df_sort['qvalue'] <= sig_level)]
+    non_sig_matrix = or_df_sort[(or_df_sort['qvalue'] > sig_level)]
+
+    # Plotting sorted Odds Ratio data
+    _, ax = plt.subplots(figsize=(5,5))
+    # Plot scatter plots
+    ax.scatter(non_sig_matrix.index, non_sig_matrix.OR, color='gray')
+    ax.scatter(sig_pos_matrix.index, sig_pos_matrix.OR, color = 'red', label='OR > 1, q < 0.1')
+    ax.scatter(sig_neg_matrix.index, sig_neg_matrix.OR, color = 'blue', label = 'OR < 1, q < 0.1')
+    ax.fill_between(sig_pos_matrix.index, (sig_pos_matrix.UpperCI), (sig_pos_matrix.LowerCI), color='r', alpha=0.2)
+    ax.fill_between(sig_neg_matrix.index, (sig_neg_matrix.LowerCI), (sig_neg_matrix.UpperCI), color='b', alpha=0.2)
+
+    # Adjust plot settings
+    ax.tick_params(labelbottom = False, bottom = False)
+    ax.tick_params(axis='y', labelsize=16)
+    ax.axhline(y=1, color='black', linestyle='--')
+    ax.legend(fontsize = 12, loc = 'upper left')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_ylabel('Odds Ratio', fontsize=16)
+
+    # Defining and adjusting the text labels for points of interest
+    if show_plot_labels:
+        texts = []
+        for i, row in sig_pos_matrix.iterrows():
+            texts.append(ax.text(row.name, row.OR, row.genomic_object, fontsize=8, color='red'))
+        for i, row in sig_neg_matrix.iterrows():
+            texts.append(ax.text(row.name, row.OR, row.genomic_object, fontsize=8, color='blue'))
+        adjust_text(texts, arrowprops=dict(arrowstyle='-', color='black'))
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=300)
+    buffer.seek(0)
+    image = Image.open(buffer)
+    plt.close()
+    return image
+
+def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: list = [], model:str = 'dominant', level: str = 'variant', ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
+    """
+    Calculate odds ratios for genetic variants based on different association methods.
+
+    Parameters:
+    - variants_by_sample (pd.DataFrame): DataFrame containing variant information for each sample.
+    - samples (pd.DataFrame): DataFrame containing sample information.
+    - genes (list): List of genes to include in the analysis. Default is an empty list.
+    - model (str): The genetic model to use for odds ratio calculations. Default is 'dominant'.
+    - method (str): The association method to use. Default is 'variant'.
+    - ea_lower (int): The lower threshold for effect size (EA). Default is 0.
+    - ea_upper (int): The upper threshold for effect size (EA). Default is 100.
+    - min_af (float): The minimum allele frequency (AF) threshold. Default is 0.0.
+    - max_af (float): The maximum allele frequency (AF) threshold. Default is 1.0.
+    - significance_level (float): The significance level for plotting. Default is 0.1.
+    - show_plot_labels (bool): Whether to show labels on the odds ratio plot. Default is True.
+    - cores (int): The number of CPU cores to use for parallel processing. Default is 1.
+    - savepath (str): The path to save the results. Default is None.
+
+    Returns:
+    - exact_test_format (pd.DataFrame): DataFrame containing the filtered and transformed variant data.
+    - or_df (pd.DataFrame): DataFrame containing the odds ratio results.
+    - or_plot (Image): Image object of the odds ratio plot.
+    """
+    # Validate the inputs
+    _validate_or_method(level)
+    _validate_ea_thresh(ea_lower, ea_upper)
+    _validate_af_thresh(min_af, max_af)
+    _validate_model(model)
+    _check_af_filters(min_af, max_af, level)
+
+    # Filter variants_by_sample
+    variants_by_sample = variants_by_sample[
+        (variants_by_sample['EA'] >= ea_lower) &
+        (variants_by_sample['EA'] <= ea_upper) &
+        (variants_by_sample['AF'] >= min_af) &
+        (variants_by_sample['AF'] <= max_af) &
+        (variants_by_sample['sample'].isin(samples.iloc[:, 0])) &
+        (variants_by_sample['gene'].isin(genes) if genes else True)
+    ]
+
+    # Transform the variants by sample data
+    exact_test_format = _transform_vbysample_to_exact_test(variants_by_sample)
+
+    # Set the iterables and saving values
+    if level == 'variant':
+        iterable = exact_test_format.HGVSp.unique().tolist()
+        column = 'HGVSp'
+    elif level == 'gene':
+        iterable = exact_test_format.gene.unique().tolist()
+        column = 'gene'
+    elif level == 'domain':
+        exact_test_format = _annotate_domain_region(exact_test_format)
+        iterable = exact_test_format.domain_annotation.unique().tolist()
+        column = 'domain_annotation'
+
+    # Check the model
+    model_column = "_All_AC" if model == 'dominant' else "_Homozygote_AC"
+
+    # Perform the odds ratio calculations
+    or_df = _parallel_or(exact_test_format, iterable, column, model_column, cores)
+    if level == 'variant':
+        or_df = pd.merge(exact_test_format[['HGVSp', 'gene', 'EA', 'AF']], or_df, left_on = 'HGVSp', right_on = 'genomic_object', how = 'right')
+        or_df = or_df.drop(columns = ['genomic_object'])
+        or_df = or_df.rename(columns = {'HGVSp': 'genomic_object'})
+    or_plot = _plot_or(or_df, sig_level = significance_level, show_plot_labels = show_plot_labels, text_col = column)
 
     if savepath:
-        do_something = 1
-
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, f'OddsRatios/{level}_{model}_EA-{ea_lower}-{ea_upper}_AF-{float(min_af)}-{float(max_af)}/')
+        os.makedirs(new_savepath, exist_ok=True)
+        # Save the exact test format
+        exact_test_format.to_csv(new_savepath + 'exact_test_format.csv', index=False)
+        # Save the odds ratio results
+        or_df.to_csv(new_savepath + 'odds_ratio_results.csv', index=False)
+        # Save the odds ratio plot
+        or_plot.save(new_savepath + 'odds_ratio_plot.png')
+    return exact_test_format, or_df, or_plot
 #endregion
 
 
 #region ea_distributions
+def _validate_distribution(distribution:str) -> None:
+    """
+    Validates the distribution parameter.
 
+    Parameters:
+    distribution (str): The distribution to be validated.
 
-def ea_distributions(variants: pd.DataFrame, min_af: float = 0.0, max_af: float = 1.0, ea_lower:int = 0, ea_upper: int = 100, savepath: str = "./") -> (Image): #type: ignore
-    x = 1
-    # Define the training and testing variables
+    Raises:
+    ValueError: If the distribution is not 'degenerate' or 'uniform'.
+
+    Returns:
+    None
+    """
+    if distribution not in ['non_degenerate', 'degenerate']:
+        raise ValueError("Distribution must be either 'degenerate' or 'non_degenerate'.")
+
+def _fetch_ea_by_distribution(exact_test_format: pd.DataFrame, gene:str, min_vars:int, distribution: str, min_af: float, max_af: float, consequence: str) -> (np.array, np.array): # type: ignore
+    """
+    Fetches the effect sizes based on the distribution.
+
+    Parameters:
+    exact_test_format (pd.DataFrame): The DataFrame containing the exact test results.
+    distribution (str): The distribution to fetch the effect sizes from.
+    min_af (float): The minimum allele frequency threshold.
+    max_af (float): The maximum allele frequency threshold.
+    ea_lower (int): The lower threshold for effect size.
+    ea_upper (int): The upper threshold for effect size.
+
+    Returns:
+    pd.DataFrame: The DataFrame containing the effect sizes based on the distribution.
+    """
+    exact_test_sub = exact_test_format[
+            (exact_test_format['AF'] >= min_af) &
+            (exact_test_format['AF'] <= max_af) &
+            (exact_test_format['gene'] == gene) &
+            (exact_test_format['Consequence'].str.contains(consequence, na=False))
+        ]
+    if exact_test_sub.shape[0] < min_vars:
+        return np.array([]), np.array([])
+
+    # Grab EA scores based on distribution
+    if distribution == 'non_degenerate':
+        case_ea = np.repeat(exact_test_sub['EA'], exact_test_sub['Case_All_AC'])
+        control_ea = np.repeat(exact_test_sub['EA'], exact_test_sub['Control_All_AC'])
+    else:
+        case_ea = exact_test_sub['EA'][exact_test_sub['Case_All_AC'] > 0]
+        control_ea = exact_test_sub['EA'][exact_test_sub['Control_All_AC'] > 0]
+    return case_ea, control_ea
+
+def _plot_ea_distribution(case_ea: np.array, control_ea: np.array, bins: int, xlim: tuple, gene:str, distribution:str, ks_p:float) -> Image:
+    """
+    Plot the effect size distribution.
+
+    Parameters:
+    case_ea (np.array): The effect sizes for the case samples.
+    control_ea (np.array): The effect sizes for the control samples.
+    bins (int): The number of bins for the histogram.
+    xlim (tuple): The x-axis limits.
+    ylim (tuple): The y-axis limits.
+    gene (str): The gene name.
+
+    Returns:
+    Image: The plotted image.
+    """
+    _, ax = plt.subplots(figsize=(5,5))
+    range_hist = (0,100)
+    case_weights = np.ones_like(case_ea) / len(case_ea)
+    ax.hist(case_ea, bins = bins, range = range_hist, weights = case_weights, alpha = 0.5, color = 'red', label = 'Case')
+    control_weights = np.ones_like(control_ea) / len(control_ea)
+    ax.hist(control_ea, bins = bins, range = range_hist, weights = control_weights, alpha = 0.5, color = 'blue', label = 'Control')
+    ax.set_xlim(xlim)
+    ax.set_xlabel('EA Score', fontsize=16)
+    ax.set_ylabel('Frequency', fontsize=16)
+    ax.legend(fontsize=12)
+    # Add title
+    distribution_fix = "Degenerate" if distribution == "degenerate" else "Non-Degenerate"
+    ax.set_title(f'{gene} - {distribution_fix}', fontsize=16)
+    # Add KS tes
+    # t p-value to top right corner
+    ax.text(0.75, 0.8, f'KS Test p-value: {round(ks_p, 3)}', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, fontsize=12)
+    plt.tight_layout()
+    # Save the plot
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=300)
+    buffer.seek(0)
+    image = Image.open(buffer)
+    plt.close()
+    return image
+
+def ea_distributions(variants_or: pd.DataFrame, genes:list, min_vars: int = 1, distribution: str = "non_degenerate", consequence: str = 'missense_variant|frameshift_variant|stop_gained', min_af: float = 0.0, max_af: float = 1.0, savepath: str = None) -> (pd.DataFrame, dict): # type: ignore
+    """
+    Perform association analysis by comparing effect size distributions between case and control groups for multiple genes.
+
+    Parameters:
+    - variants_agg (pd.DataFrame): The input dataframe containing the exact test results.
+    - genes (list): The list of genes to analyze.
+    - min_vars (int, optional): The minimum number of variants required for a gene to be included in the analysis. Default is 1.
+    - distribution (str, optional): The type of distribution to use for the analysis. Default is "non_degenerate".
+    - consequence (str, optional): The consequence type of variants to consider. Default is 'missense_variant|frameshift_variant|stop_gained'.
+    - min_af (float, optional): The minimum allele frequency threshold for variants to be included in the analysis. Default is 0.0.
+    - max_af (float, optional): The maximum allele frequency threshold for variants to be included in the analysis. Default is 1.0.
+    - savepath (str, optional): The path to save the results. Default is None.
+
+    Returns:
+    - p_values_df (pd.DataFrame): A dataframe containing the p-values and FDR-corrected p-values for each gene.
+    - plots (dict): A dictionary containing the plots of effect size distributions for each gene.
+
+    """
+    # Validate the inputs
+    _validate_distribution(distribution)
+
+    # Get the distributions
+    p_values = {}
+    plots = {}
+    for gene in genes:
+        case_ea, control_ea = _fetch_ea_by_distribution(variants_or, gene, min_vars, distribution, min_af, max_af, consequence)
+        # Test distributions by 2 sample KS test
+        try: _, ks_p = ks_2samp(case_ea, control_ea, alternative = 'two-sided')
+        except ValueError: _, ks_p = np.nan, np.nan
+        # Plot the distributions
+        plot = _plot_ea_distribution(case_ea, control_ea, bins = 20, xlim = (0, 100), gene = gene, distribution = distribution, ks_p = ks_p)
+        # Save the results
+        p_values[gene] = ks_p
+        plots[gene] = plot
+
+    # Create a dataframe and FDR correct the p-values
+    p_values_df = pd.DataFrame(p_values.items(), columns = ['Gene', 'KS_p'])
+    p_values_df['FDR'] = multipletests(p_values_df['KS_p'], alpha = 0.05, method = 'fdr_bh')[1]
+
+    # Save values
+    if savepath:
+        savepath = _fix_savepath(savepath)
+        new_savepath = os.path.join(savepath, f'EA_Distributions/{distribution}_AF-{min_af}-{max_af}/')
+        os.makedirs(new_savepath, exist_ok=True)
+        # Save the p-values
+        p_values_df.to_csv(new_savepath + 'p_values.csv', index=False)
+        # Save the plots
+        for gene, plot in plots.items():
+            plot_savepath = os.path.join(new_savepath, "Plots/")
+            os.makedirs(plot_savepath, exist_ok=True)
+            plot.save(plot_savepath + f'{gene}_EA_Distribution.png')
+
+    return p_values_df, plots
 #endregion
