@@ -1393,15 +1393,15 @@ def _perform_or(exact_test_df: pd.DataFrame, iterable: str, it_column:str, model
     # Get allele counts in cases and controls
     case_with = int(sum(sub_df[f'Case{model_column}']))
     control_with = int(sum(sub_df[f'Control{model_column}']))
-    #if model_column == 'HGVSp':
-    case_without = math.floor(np.mean(sub_df['Case_AN']) - case_with)
-    control_without = math.floor(np.mean(sub_df['Control_AN']) - control_with)
-    #else:
-        #case_without = int(sub_df['Case_AN'].sum() - case_with)
-        #control_without = int(sub_df['Control_AN'].sum() - control_with)
 
     # Perform odds ratio calculation
     try:
+        #if model_column == 'HGVSp':
+        case_without = math.floor(np.mean(sub_df['Case_AN']) - case_with)
+        control_without = math.floor(np.mean(sub_df['Control_AN']) - control_with)
+        #else:
+            #case_without = int(sub_df['Case_AN'].sum() - case_with)
+            #control_without = int(sub_df['Control_AN'].sum() - control_with)
         oddsratio, pvalue = fisher_exact(
             [[case_with, control_with],
             [case_without, control_without]]
