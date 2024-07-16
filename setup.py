@@ -3,7 +3,7 @@ Setup script for pyCfS, a package for gene list validation experiments
 """
 import setuptools
 
-VERSION = '0.0.14.6'
+VERSION = '0.0.14.7'
 
 setuptools.setup(
     name = 'pyCfS',
