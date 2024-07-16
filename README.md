@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.14.6 <br>
+Version 0.0.14.7 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -381,7 +381,7 @@ Takes the variants_by_sample output and performs odds ratio calculations based o
 - **Optional**:
     - `model` (str): Model to calculate odds ratios. Options = ['dominant', 'recessive']. Dominant model includes both heterozygous and homozygous variants. Recessive model only analyzes homozygous variants. Default = 'dominant'
     - `level` (str): Level of analysis. Options = ['variant', 'gene', 'domain']. Variant analyzes variant-by-variant. Gene analyzes gene-collapsed odds ratios. Domain analyzes protein-domains annotated by Evidence and Conclusion Ontology (ECO). Default = 'variant'.
-    - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained".
+    - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost".
     - `ea_lower` (int): Minimum EA score for variants to include. Default = 0.
     - `ea_upper` (int): Maximum EA score for variants to include. Default = 100.
     - `min_af` (float): Minimum allele frequency to include. Default = 0.0.
@@ -404,7 +404,7 @@ Takes the odds_ratio output dataframe and tests EA score distribution, using the
 - **Optional**:
     - `min_vars` (int): Minimum number of variants needed to analyze distributions.
     - `distribution` (str): Method of counting EA scores. Options = ['non_degenerate', 'degenerate']. Non_degenerate expands EA scores by the allele count in cases and controls. Degenerate only records one EA score if any sample has the variant. Default = 'non_degenerate'.
-    - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained".
+    - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost".
     - `min_af` (float): Minimum allele frequency for variants. Default = 0.0.
     - `max_af` (float): Maximum allele frequency for variants. Default = 1.0.
     - `savepath` (str): Path for saving. Default = None.
