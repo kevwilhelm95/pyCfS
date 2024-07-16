@@ -1554,7 +1554,7 @@ def _plot_or(or_df: pd.DataFrame, sig_level: float, show_plot_labels: bool, text
     plt.close()
     return image
 
-def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: list = [], model:str = 'dominant', level: str = 'variant', ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
+def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: list = [], model:str = 'dominant', level: str = 'variant', consquence:str = "missense_variant|frameshift_variant|stop_gained", ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
     """
     Calculate odds ratios for genetic variants based on different association methods.
 
@@ -1591,6 +1591,7 @@ def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: 
         (variants_by_sample['EA'] <= ea_upper) &
         (variants_by_sample['AF'] >= min_af) &
         (variants_by_sample['AF'] <= max_af) &
+        (variants_by_sample['Consequence'].str.contains(consquence, na=False)) &
         (variants_by_sample['sample'].isin(samples.iloc[:, 0])) &
         (variants_by_sample['gene'].isin(genes) if genes else True)
     ]
