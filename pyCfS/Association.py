@@ -1554,7 +1554,7 @@ def _plot_or(or_df: pd.DataFrame, sig_level: float, show_plot_labels: bool, text
     plt.close()
     return image
 
-def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: list = [], model:str = 'dominant', level: str = 'variant', consquence:str = "missense_variant|frameshift_variant|stop_gained", ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
+def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: list = [], model:str = 'dominant', level: str = 'variant', consquence:str = "missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost", ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
     """
     Calculate odds ratios for genetic variants based on different association methods.
 
@@ -1726,7 +1726,7 @@ def _plot_ea_distribution(case_ea: np.array, control_ea: np.array, bins: int, xl
     plt.close()
     return image
 
-def ea_distributions(variants_or: pd.DataFrame, genes:list, min_vars: int = 1, distribution: str = "non_degenerate", consequence: str = 'missense_variant|frameshift_variant|stop_gained', min_af: float = 0.0, max_af: float = 1.0, savepath: str = None) -> (pd.DataFrame, dict): # type: ignore
+def ea_distributions(variants_or: pd.DataFrame, genes:list, min_vars: int = 1, distribution: str = "non_degenerate", consequence: str = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost', min_af: float = 0.0, max_af: float = 1.0, savepath: str = None) -> (pd.DataFrame, dict): # type: ignore
     """
     Perform association analysis by comparing effect size distributions between case and control groups for multiple genes.
 
