@@ -123,7 +123,7 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list, pval:f
         text.set_fontsize(fontsize)
     if show_genes_pval:
         plt.text(0, -0.7,
-                str("p = " + _format_scientific(pval)),
+                str("p = " + f"{pval:.2e}"),
                 horizontalalignment='center',
                 verticalalignment='top',
                 fontsize=fontsize-2)
@@ -132,7 +132,7 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list, pval:f
                 horizontalalignment='center',
                 verticalalignment='top',
                 fontsize=fontsize-2)
-    plt.title("Gold Standard Overlap", fontsize=fontsize+4)
+    #plt.title("Gold Standard Overlap", fontsize=fontsize+4)
     plt.tight_layout(pad = 2.0)
     buffer = io.BytesIO()
     plt.savefig(buffer, format = 'png', dpi = 300)
