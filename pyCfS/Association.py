@@ -141,7 +141,6 @@ def _convert_zygo(genotype:tuple) -> (int, int): # type: ignore
         zygo = 0
         an = 0
     else:
-        print(genotype)
         zygo = 0
         an = 0
     return zygo, an
@@ -359,7 +358,7 @@ def _validate_separate_input_models(input_models: Any) -> list:
     valid_models = ['LR', 'SVC', 'GB', 'RF', 'XGB']
     for model in input_models:
         if model not in valid_models:
-            print(f"Invalid model: {model}. Skipping this model. Valid models are: {valid_models}.")
+            warnings.warn(f"Invalid model: {model}. Skipping this model. Valid models are: {valid_models}.")
             input_models.remove(model)
     return input_models
 
@@ -550,65 +549,6 @@ def _rfe_cv(estimator: Any, x_train: pd.DataFrame, y_train: pd.DataFrame, min_fe
 
     return selected_features, feature_importances, rfe_cv_results, rfe_cv_plot
 
-def _old_run_recursive_feature_elimination(estimator: Any, x_train: pd.DataFrame, y_train: pd.DataFrame, n_features:int, max_feature_ratio:float) -> (Any, pd.DataFrame): #type: ignore
-    """
-    Run Recursive Feature Elimination (RFE) on the given model.
-
-    Args:
-        estimator (Any): The model estimator.
-        x_train (pd.DataFrame): The training feature matrix.
-        y_train (pd.DataFrame): The training target vector.
-        n_features (int): The number of features to select.
-
-    Returns:
-        tuple: A tuple containing the RFE object and the feature matrix with the selected features.
-    """
-    # Initialize holding objects and settings
-    meta_df = pd.DataFrame(index = x_train.columns)
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=len(x_train.columns))
-    # Loop through cross-validation
-    for i, (train_index, test_index) in enumerate(cv.split(x_train, y_train)):
-        print("Fold: ", i)
-        # Get cross-validation groups
-        x_train_cv, x_test_cv = x_train.iloc[train_index], x_train.iloc[test_index]
-        y_train_cv, y_test_cv = y_train.iloc[train_index], y_train.iloc[test_index]
-        # Initialize RFE
-        rfe = RFE(estimator, n_features_to_select=n_features, step=1)
-        rfe.fit(x_train_cv, y_train_cv)
-        # Get the feature ranking
-        rfe_rank = pd.DataFrame(
-            {f"Ranking-Fold-{i}": rfe.ranking_,},
-            index = rfe.feature_names_in_
-        ).sort_values(by=f"Ranking-Fold-{i}", ascending=True)
-        # Merge with meta_df
-        meta_df = meta_df.merge(rfe_rank, left_index=True, right_index=True, how='outer')
-        print(meta_df.head(3))
-        meta_df = meta_df.sort_values(by = f"Ranking-Fold-{i}", ascending = False)
-        print(meta_df.head(3))
-
-        # Get the accuracy of genes for prediction against cross-validation
-        top_features = []
-        for gene, row in rfe_rank.iterrows():
-            top_features.append(gene)
-            x_train_cv_sub = x_train_cv[top_features]
-            x_test_cv_sub = x_test_cv[top_features]
-            estimator.fit(x_train_cv_sub, y_train_cv)
-            y_pred = estimator.predict(x_test_cv_sub)
-            meta_df.loc[gene, f"Accuracy-Fold-{i}"] = balanced_accuracy_score(y_test_cv, y_pred)
-
-    # Calculate averages across meta-df
-    meta_df['Mean_Rank'] = meta_df[[x for x in meta_df.columns if "Ranking" in x]].mean(axis=1)
-    meta_df['Mean_Accuracy'] = meta_df[[x for x in meta_df.columns if "Accuracy" in x]].mean(axis=1)
-    meta_df['Accuracy_Std'] = meta_df[[x for x in meta_df.columns if "Accuracy" in x]].std(axis=1)
-    meta_df = meta_df.sort_values(by='Mean_Rank', ascending=True)
-    print(meta_df.head(3))
-    #### Need to output and save meta-df
-
-    # Calculate the cutoff point for features
-    max_n_features = math.ceil(meta_df.shape[0] * max_feature_ratio)
-    cutoff = meta_df.loc[0:int(max_n_features), 'Mean_Accuracy'].idxmax()
-    cutoff = meta_df.index.get_loc(cutoff)
-
 def _bayesian_optimization_auroc_progression(df: pd.DataFrame) -> Image:
     """
     Plot the progression of AUROC through the hyperparameter search space.
@@ -631,7 +571,7 @@ def _bayesian_optimization_auroc_progression(df: pd.DataFrame) -> Image:
     plt.close()
     return image
 
-def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFrame, y_train: pd.DataFrame, n_iter: int, n_splits: int, n_repeats: int, cores: int) -> (Any, pd.DataFrame, Image): #type: ignore
+def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFrame, y_train: pd.DataFrame, n_iter: int, n_splits: int, n_repeats: int, cores: int, verbose:int = 0) -> (Any, pd.DataFrame, Image): #type: ignore
     """
     Optimize hyperparameters using Bayesian optimization.
 
@@ -673,7 +613,7 @@ def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFram
 
     """
     # Define our custom stopper for the BayesSearchCV
-    class CustomDeltaYStopper(DeltaYStopper):
+    class CustomDeltaYStopper(DeltaYStopper, verbose=0):
         """
         Custom callback for the BayesSearchCV function to stop the search early when
         the best scores have converged below a specified threshold.
@@ -707,12 +647,13 @@ def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFram
             based on the provided convergence criteria.
 
         """
-        def __init__(self, delta:float, n_best:int=5, patience:int=5, min_iters:int = 20) -> None:
+        def __init__(self, delta:float, n_best:int=5, patience:int=5, min_iters:int = 20, verbose:int = 0) -> None:
             super().__init__(delta)
             self.n_best = n_best
             self.patience = patience
             self._count = 0
             self.min_iters = min_iters
+            self.verbose = verbose
 
         def _criterion(self, result: Any) -> bool:
             """
@@ -733,7 +674,8 @@ def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFram
             if delta < self.delta:
                 self._count += 1
                 if self._count >= self.patience:
-                    print(f"Early stopping occurred at iteration: {len(result.func_vals)}")
+                    if self.verbose > 0:
+                        print(f"Early stopping occurred at iteration: {len(result.func_vals)}")
                     return True
             else:
                 self._count = 0
@@ -742,7 +684,7 @@ def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFram
 
     # Initialize search objects
     cv = RepeatedStratifiedKFold(n_splits=n_splits, n_repeats=n_repeats, random_state=len(x_train.columns))
-    delta_y_callback = CustomDeltaYStopper(delta=0.0001, n_best = 5, patience = 5, min_iters = 20)
+    delta_y_callback = CustomDeltaYStopper(delta=0.0001, n_best = 5, patience = 5, min_iters = 20, verbose = verbose)
     search = BayesSearchCV(
         estimator = estimator,
         search_spaces = params,
@@ -832,7 +774,7 @@ def _optimize_features_hyperparameters(input_models: Any, rfe:bool, x_train:pd.D
 
     return final_estimator, best_model, selected_features, best_df, rfe_importances, rfe_results, rfe_results_plot, bayes_results, bayes_results_plot, models_to_test
 
-def _save_feature_weights(estimator: Any, model: str, feature_matrix: pd.DataFrame) -> pd.DataFrame:
+def _save_feature_weights(estimator: Any, model: str, feature_matrix: pd.DataFrame, verbose: int = 0) -> pd.DataFrame:
     """
     Save the feature weights of a given model.
 
@@ -854,7 +796,9 @@ def _save_feature_weights(estimator: Any, model: str, feature_matrix: pd.DataFra
             coefficients = estimator.coef_[0]
             feature_weights = dict(zip(feature_matrix.columns, coefficients))
         except:
-            print("Model does not have coefficients")
+            if verbose > 0:
+                print("Model does not have coefficients")
+            feature_weights = None
     elif model in ['GB', 'RF', 'XGB']:
         importances = estimator.feature_importances_
         feature_weights = dict(zip(feature_matrix.columns, importances))
@@ -1028,7 +972,7 @@ def _plot_histo_w_or(predictions_gene: pd.DataFrame, bins:int = 50, xlim_lower:f
 
     return image, or_df, ks_p
 
-def risk_prediction(feature_matrix: pd.DataFrame, train_samples: pd.DataFrame, test_samples: pd.DataFrame, models: Any = 'RF', rfe:bool = False, rfe_min_feature_ratio:float = 0.5, cores:int = 1, savepath: str = None) -> (Image, Image, pd.DataFrame): # type: ignore
+def risk_prediction(feature_matrix: pd.DataFrame, train_samples: pd.DataFrame, test_samples: pd.DataFrame, models: Any = 'RF', rfe:bool = False, rfe_min_feature_ratio:float = 0.5, cores:int = 1, savepath: str = None, verbose:int = 0) -> (Image, Image, pd.DataFrame): # type: ignore
     """
     Perform risk prediction using machine learning models.
 
@@ -1062,7 +1006,7 @@ def risk_prediction(feature_matrix: pd.DataFrame, train_samples: pd.DataFrame, t
     # Cross-Validation
     cv_score = cross_val_score(final_estimator, x_train, y_train, cv=10, scoring='roc_auc')
     # Get Feature Weights
-    feature_weights = _save_feature_weights(final_estimator, models, x_train)
+    feature_weights = _save_feature_weights(final_estimator, models, x_train, verbose = verbose)
 
     ## Test the final model
     x_test = x_test.loc[:,selected_features]
@@ -1140,7 +1084,7 @@ def risk_prediction(feature_matrix: pd.DataFrame, train_samples: pd.DataFrame, t
                     f.write(f'Left-Out Sample ROC-AUC Score: {rocauc_score}\n')
                     f.write(f'Left-Out KS Test p-value b/w the two distributions: {ks_p}')
 
-    return eval_dist_plot, val_auroc_curve, predictions_gene_df
+    return eval_dist_plot, val_auroc_curve, predictions_gene_df, feature_weights
 #endregion
 
 
@@ -1188,9 +1132,9 @@ def _check_af_filters(af_min: float, af_max:float, method:str) -> None:
         ValueError: If the allele frequency filters are invalid.
     """
     if method == 'variant' and af_min < 0.01:
-            print("WARNING: Minimum allele frequency is less than 1%. This may result in many underpowered variants being tested, leading to a stringent FDR.")
+        warnings.warn("WARNING: Minimum allele frequency is less than 1%. This may result in many underpowered variants being tested, leading to a stringent FDR.")
     elif method in ['domain', 'gene'] and af_max > 0.01:
-            print("WARNING: Maximum allele frequency is greater than 1%. This may result in an Exact Test error due to allele number calculations. We suggest lowering the max_af to 0.01.")
+        warnings.warn("WARNING: Maximum allele frequency is greater than 1%. This may result in an Exact Test error due to allele number calculations. We suggest lowering the max_af to 0.01.")
 
 def _parse_domains(row: pd.Series) -> list:
     """
@@ -1374,7 +1318,7 @@ def _or_fdr(or_matrix: pd.DataFrame) -> pd.DataFrame:
         or_matrix['qvalue'] = qvals
     return or_matrix
 
-def _perform_or(exact_test_df: pd.DataFrame, iterable: str, it_column:str, model_column:str) -> pd.DataFrame:
+def _perform_or(exact_test_df: pd.DataFrame, iterable: str, it_column:str, model_column:str, verbose: int = 0) -> pd.DataFrame:
     """
     Perform odds ratio calculation and confidence interval estimation for a given iterable.
 
@@ -1409,21 +1353,24 @@ def _perform_or(exact_test_df: pd.DataFrame, iterable: str, it_column:str, model
     except ValueError as e:
         e = str(e)
         if "nonnegative" in e:
-            print("WARNING: Unable to calculate odds ratio due to negative allele number values. This is due to allele frequency issues. Please decrease the max_af threshold to 0.01.")
+            if verbose > 0:
+                warnings.warn("WARNING: Unable to calculate odds ratio due to negative allele number values. This is due to allele frequency issues. Please decrease the max_af threshold to 0.01.")
         elif "zero" in e:
-            print("WARNING: Unable to calculate odds ratio due to zero allele number values.")
+            if verbose > 0:
+                warnings.warn("WARNING: Unable to calculate odds ratio due to zero allele number values.")
         else:
-            print("WARNING: Unable to calculate odds ratio.")
+            if verbose > 0:
+                warnings.warn("WARNING: Unable to calculate odds ratio.")
         output = pd.DataFrame({
             'genomic_object': [iterable],
-            'OR': [np.nan],
-            'LowerCI': [np.nan],
-            'UpperCI': [np.nan],
+            'OR': [1],
+            'LowerCI': [1],
+            'UpperCI': [1],
             'AC_case_with': [np.nan],
             'AC_control_with': [np.nan],
             'AC_case_without': [np.nan],
             'AC_control_without': [np.nan],
-            'pvalue': [np.nan]
+            'pvalue': [1]
         })
         return output
 
@@ -1458,15 +1405,15 @@ def _perform_or(exact_test_df: pd.DataFrame, iterable: str, it_column:str, model
         'OR': [oddsratio],
         'LowerCI': [lower_ci],
         'UpperCI': [upper_ci],
-        'n_case_with': [case_with],
-        'n_control_with': [control_with],
-        'n_case_without': [case_without],
-        'n_control_without': [control_without],
+        'AC_case_with': [case_with],
+        'AC_control_with': [control_with],
+        'AC_case_without': [case_without],
+        'AC_control_without': [control_without],
         'pvalue': [pvalue]
     })
     return output
 
-def _parallel_or(exact_test_df: pd.DataFrame, iterable: list, it_column:str, model_column: str, cores: int) -> pd.DataFrame:
+def _parallel_or(exact_test_df: pd.DataFrame, iterable: list, it_column:str, model_column: str, cores: int, verbose: int = 0) -> pd.DataFrame:
     """
     Perform parallelized OR calculation for each item in the iterable.
 
@@ -1486,7 +1433,8 @@ def _parallel_or(exact_test_df: pd.DataFrame, iterable: list, it_column:str, mod
         [exact_test_df]*len(iterable),
         iterable,
         [it_column] * len(iterable),
-        [model_column]*len(iterable)
+        [model_column]*len(iterable),
+        [verbose]*len(iterable)
     ))
     pool = mp.Pool(processes = cores)
     output = pool.starmap(_perform_or, args_)
@@ -1548,13 +1496,13 @@ def _plot_or(or_df: pd.DataFrame, sig_level: float, show_plot_labels: bool, text
         adjust_text(texts, arrowprops=dict(arrowstyle='-', color='black'))
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300)
+    plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
     image = Image.open(buffer)
     plt.close()
     return image
 
-def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: list = [], model:str = 'dominant', level: str = 'variant', consequence:str = "missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost", ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
+def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, query: list = [], model:str = 'dominant', level: str = 'variant', consequence:str = "missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost", ea_lower:int = 0, ea_upper:int = 100, min_af:float = 0.0, max_af:float = 1.0, significance_level: float = 0.1, show_plot_labels:bool = True, cores: int = 1, savepath: str = None, verbose:int = 0) -> (pd.DataFrame, pd.DataFrame, Image): #type: ignore
     """
     Calculate odds ratios for genetic variants based on different association methods.
 
@@ -1593,7 +1541,7 @@ def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: 
         (variants_by_sample['AF'] <= max_af) &
         (variants_by_sample['Consequence'].str.contains(consequence, na=False)) &
         (variants_by_sample['sample'].isin(samples.iloc[:, 0])) &
-        (variants_by_sample['gene'].isin(genes) if genes else True)
+        (variants_by_sample['gene'].isin(query) if query else True)
     ]
 
     # Transform the variants by sample data
@@ -1615,11 +1563,16 @@ def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: 
     model_column = "_All_AC" if model == 'dominant' else "_Homozygote_AC"
 
     # Perform the odds ratio calculations
-    or_df = _parallel_or(exact_test_format, iterable, column, model_column, cores)
+    or_df = _parallel_or(exact_test_format, iterable, column, model_column, cores, verbose = verbose)
+    # Clean up the resulting dataframe
     if level == 'variant':
         or_df = pd.merge(exact_test_format[['HGVSp', 'gene', 'EA', 'AF']], or_df, left_on = 'HGVSp', right_on = 'genomic_object', how = 'right')
         or_df = or_df.drop(columns = ['genomic_object'])
         or_df = or_df.rename(columns = {'HGVSp': 'genomic_object'})
+    elif level == 'domain':
+        or_df['gene'] = or_df['genomic_object'].str.split('_').str[0]
+    else:
+        or_df['gene'] = or_df['genomic_object']
     or_plot = _plot_or(or_df, sig_level = significance_level, show_plot_labels = show_plot_labels, text_col = column)
 
     if savepath:
@@ -1631,7 +1584,7 @@ def odds_ratios(variants_by_sample: pd.DataFrame, samples: pd.DataFrame, genes: 
         # Save the odds ratio results
         or_df.to_csv(new_savepath + 'odds_ratio_results.csv', index=False)
         # Save the odds ratio plot
-        or_plot.save(new_savepath + 'odds_ratio_plot.png')
+        or_plot.save(new_savepath + 'odds_ratio_plot.png', bbox_inches='tight')
     return exact_test_format, or_df, or_plot
 #endregion
 
