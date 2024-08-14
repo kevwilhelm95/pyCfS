@@ -613,7 +613,7 @@ def _optimize_hyperparameters(estimator: Any, params: dict, x_train: pd.DataFram
 
     """
     # Define our custom stopper for the BayesSearchCV
-    class CustomDeltaYStopper(DeltaYStopper):
+    class CustomDeltaYStopper(DeltaYStopper, verbose=0):
         """
         Custom callback for the BayesSearchCV function to stop the search early when
         the best scores have converged below a specified threshold.

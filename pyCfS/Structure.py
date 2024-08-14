@@ -89,14 +89,13 @@ def _r_install_package(package_name:str) -> None:
             else:
                 utils.install_packages(StrVector([package_name]))
         except rpy2.rinterface_lib.embedded.RRuntimeError as e:
-            print(f"An error occurred while installing {package_name}: {e}")
+            warnings.warn(f"An error occurred while installing {package_name}: {e}")
             # Attempt to install system dependencies if the package is known to require compilation
             if package_name in ['interp']:
-                print(f"Attempting to install system dependencies for {package_name}")
                 try:
                     utils.install_packages(StrVector([package_name]))
                 except Exception as e:
-                    print(f"Failed to install {package_name} after attempting to resolve dependencies: {e}")
+                    raise ValueError(f"Failed to install {package_name} after attempting to resolve dependencies: {e}")
 
 def _install_evotrace() -> None:
     """
@@ -133,7 +132,7 @@ def _check_pdb_id(protein_id:str) -> str:
         protein_id = pdb_sub['prot_id'].values[0]
     return protein_id
 
-def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int) -> PILImage.Image:
+def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int, verbose:int = 0) -> PILImage.Image:
     """
     Generate a lollipop plot using R's EvoTrace package.
 
@@ -156,7 +155,7 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
         r_case_vars = robjects.conversion.py2rpy(case_vars)
         r_cont_vars = robjects.conversion.py2rpy(cont_vars)
     # Check options
-    ensp_hold = _check_ensp_len(case_vars.ENSP.unique().tolist())
+    ensp_hold = _check_ensp_len(case_vars.ENSP.unique().tolist(), verbose = verbose)
     if ea_color not in ['prismatic', 'gray_scale', 'EA_bin', 'black']:
         raise ValueError("ea_color must be one of 'prismatic', 'gray_scale', 'EA_bin', or 'black'")
     if ac_scale not in ['linear', 'log']:
@@ -184,12 +183,12 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
             continue
         except Exception as e:
             if "missing value where TRUE/FALSE needed" in e:
-                print(f'{prot_id} does not match length of input variants')
+                warnings.warn(f'{prot_id} does not match length of input variants')
             else:
-                print(f"Error: {e}")
+                warnings.warn(f"Error: {e}")
             ran = False
     if ran == False:
-        print(f"No ENSP IDs match")
+        warnings.warn(f"No ENSP IDs match")
         return PILImage.new('RGB', (1, 1))
     # Save the plot
     r(f"""ggsave("{plot_path}", plot, device = "png", width = 10, height = 5, dpi = 300)""")
@@ -201,7 +200,7 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
     lollipop_plot_plot = PILImage.open(image_buffer)
     return lollipop_plot_plot
 
-def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int) -> PILImage.Image:
+def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int, verbose:int = 0) -> PILImage.Image:
     """
     Generate a lollipop plot using the EvoTrace package.
 
@@ -222,7 +221,7 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
     with localconverter(robjects.default_converter + pandas2ri.converter):
         r_input_vars = robjects.conversion.py2rpy(input_vars)
     # Check options
-    ensp_hold = _check_ensp_len(input_vars.ENSP.unique())
+    ensp_hold = _check_ensp_len(input_vars.ENSP.unique(), verbose = verbose)
     # Check values
     if ea_color not in ['prismatic', 'gray_scale', 'EA_bin', 'black']:
         raise ValueError("ea_color must be one of 'prismatic', 'gray_scale', 'EA_bin', or 'black'")
@@ -252,12 +251,12 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
             continue
         except Exception as e:
             if "missing value where TRUE/FALSE needed" in e:
-                print(f'{prot_id} does not match length of input variants')
+                warnings.warn(f'{prot_id} does not match length of input variants')
             else:
-                print(f"Error: {e}")
+                warnings.warn(f"Error: {e}")
             ran = False
     if ran == False:
-        print(f"No ENSP IDs match")
+        warnings.warn(f"No ENSP IDs match")
         return PILImage.new('RGB', (1, 1))
     # Save the plot
     r(f"""ggsave("{plot_path}", plot, device = "png", width = 10, height = 5, dpi = 300)""")
@@ -269,7 +268,7 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
     lollipop_plot_plot = PILImage.open(image_buffer)
     return lollipop_plot_plot
 
-def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_pop:int=0, cont_pop:int=0, max_af:float = 1.0, min_af:float = 0.0, ea_lower:float = 0.0, ea_upper:float = 100.0, show_domains:bool = True, ac_scale:str = 'linear', ea_color:str = 'prismatic', domain_min_dist:int = 20, savepath:str = False) -> (Image, float, float, float, float): # type: ignore
+def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_pop:int=0, cont_pop:int=0, max_af:float = 1.0, min_af:float = 0.0, ea_lower:float = 0.0, ea_upper:float = 100.0, show_domains:bool = True, ac_scale:str = 'linear', ea_color:str = 'prismatic', domain_min_dist:int = 20, savepath:str = False, verbose: int = 0) -> (Image, float, float, float, float): # type: ignore
     """
     Generate a lollipop plot for a given gene based on variant data.
 
@@ -298,16 +297,17 @@ def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_po
     if (case_pop == 0) & (cont_pop == 0):
         case_pop = variants['sample'][variants['CaseControl'] == 1].nunique()
         cont_pop = variants['sample'][variants['CaseControl'] == 0].nunique()
-    print(f"Number of cases in variant file: {case_pop}")
-    print(f"Number of controls in variant file: {cont_pop}")
+    if verbose > 1:
+        print(f"Number of cases in variant file: {case_pop}")
+        print(f"Number of controls in variant file: {cont_pop}")
     # Filter dataframe for gene and split by case and control
     case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper)
     if case_vars.empty:
-        print(f"No variants found for {gene} in case group. Using controls only")
+        warnings.warn(f"No variants found for {gene} in case group. Using controls only")
         group = 'control'
         cont_vars_collapsed = _clean_variant_formats(cont_vars)
     elif cont_vars.empty:
-        print(f"No variants found for {gene} in control group. Using cases only")
+        warnings.warn(f"No variants found for {gene} in control group. Using cases only")
         group = 'case'
         case_vars_collapsed = _clean_variant_formats(case_vars)
     else:
@@ -319,13 +319,13 @@ def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_po
         # Calculate fisher's exact test
         odds_ratio, lower_ci, upper_ci, pval = _fishers_exact_test(case_vars, cont_vars, case_pop, cont_pop)
         # Create the lollipop plot
-        plot = _r_lollipop_plot2(case_vars_collapsed, cont_vars_collapsed, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist)
+        plot = _r_lollipop_plot2(case_vars_collapsed, cont_vars_collapsed, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist, verbose = verbose)
 
     # Run lollipop_plot1 for single group
     elif group == 'case' or group == 'control':
         input_vars = case_vars_collapsed if group == 'case' else cont_vars_collapsed
         # Create lollipop plot
-        plot = _r_lollipop_plot1(input_vars, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist)
+        plot = _r_lollipop_plot1(input_vars, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist, verbose = verbose)
         pval, odds_ratio, lower_ci, upper_ci = None, None, None, None
 
     # Save data
@@ -441,14 +441,14 @@ def _download_af_model(url:str) -> pd.DataFrame:
             text = response.read().decode('utf-8')
             lines = text.splitlines()
     except urllib.error.URLError as e:
-        print(f"An error occurred while downloading the file: {e}, waiting another 60s")
+        warnings.warn(f"An error occurred while downloading the file: {e}, waiting another 60s")
         time.sleep(60)
         try:
             with urllib.request.urlopen(url) as response:
                 text = response.read().decode('utf-8')
                 lines = text.splitlines()
         except urllib.error.URLError as e:
-            print(f"An error occurred while downloading the file: {e}, skipping")
+            warnings.warn(f"An error occurred while downloading the file: {e}, skipping")
             return pd.DataFrame()
     #df = pd.DataFrame([line.split('\t') for line in lines[1:]], columns=lines[0].split('\t'))
     return lines
@@ -521,7 +521,7 @@ def _get_plddt(prot_id:str, gene:str, chain:str, plddt_cutoff:int, savepath:str)
     # Filter for the given gene name
     try: af_url = pdb_df['AF_url'][pdb_df['prot_id'].str.contains(prot_id)].values[0]
     except:
-        print("Gene not found in PDB-AF ID map.")
+        warnings.warn("Gene not found in PDB-AF ID map.")
         return pd.DataFrame()
     # Download the AlphaFold model
     af_model = _download_af_model(af_url)
@@ -703,7 +703,7 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
     # Separate into case and control variants
     case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper)
     if case_vars.empty:
-        print(f"No variants found for {gene} in case group. Using controls only")
+        warnings.warn(f"No variants found for {gene} in case group. Using controls only")
         cont_vars_collapsed = _clean_variant_formats(cont_vars)
         cont_vars_residues = _prepare_resi_df(cont_vars_collapsed)
         all_residues = pd.DataFrame()
@@ -714,7 +714,7 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
         prot_id = _check_pdb_id(prot_id)
         gene = cont_vars.loc[0, 'gene']
     elif cont_vars.empty:
-        print(f"No variants found for {gene} in control group. Using cases only")
+        warnings.warn(f"No variants found for {gene} in control group. Using cases only")
         case_vars_collapsed = _clean_variant_formats(case_vars)
         case_vars_residues = _prepare_resi_df(case_vars_collapsed)
         all_residues = pd.DataFrame()
@@ -797,7 +797,7 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
             cont_plot.save(os.path.join(new_savepath, f'Controls_{gene}_AF{min_af}-{max_af}_EA{ea_lower}-{ea_upper}_SCW_analysis.png'))
 
     if not savepath:
-        print("No savepath provided. Skipping structure visualization.")
+        warnings.warn("No savepath provided. Skipping structure visualization.")
 
     return all_output_df, case_output_df, cont_output_df, all_plot, case_plot, cont_plot
 
