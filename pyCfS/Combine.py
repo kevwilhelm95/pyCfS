@@ -1447,7 +1447,6 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     # Remove duplicates, keeping the one with the most columns
     final_df = combined_df[~combined_df.index.duplicated(keep='first')]
     final_df = final_df.sort_values(by = 'p.cauchy', ascending = True)
-    print(final_df.shape)
     if savepath:
         savepath = _fix_savepath(savepath)
         new_savepath = os.path.join(savepath, 'Statistical_Consensus/')

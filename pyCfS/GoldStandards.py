@@ -2774,7 +2774,7 @@ def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, emai
                 gene, n_paper_dis = _parse_entrez_result(result)
                 n_paper_dis = result.get('Count', 0)
                 tempdf.loc[gene, 'Count'] = int(n_paper_dis)
-
+            tempdf = tempdf.rename(columns = {'Count': 'PubMed_CoMentions-' + disease_query})
         # Append the temporary DataFrame to the list
         randfs.append(tempdf)
 
@@ -2869,8 +2869,8 @@ def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = Fals
         enrich_results, enrich_images = {}, {}
         rand_result_df = pd.DataFrame({'Iteration': range(0, len(rand_dfs))})
         for min_thresh, max_thresh in enrichment_cutoffs:
-            observation = query_comention_df[(query_comention_df['Count'] > min_thresh) & (query_comention_df['Count'] <= max_thresh)].shape[0]
-            background = [tmp[(tmp['Count'] > min_thresh) & (tmp['Count'] <= max_thresh)].shape[0] for tmp in rand_dfs]
+            observation = query_comention_df[(query_comention_df['PubMed_CoMentions-' + output_name] > min_thresh) & (query_comention_df['PubMed_CoMentions-' + output_name] <= max_thresh)].shape[0]
+            background = [tmp[(tmp['PubMed_CoMentions-'+output_name] > min_thresh) & (tmp['PubMed_CoMentions-' + output_name] <= max_thresh)].shape[0] for tmp in rand_dfs]
             rand_result_df[f"{min_thresh + 1},{max_thresh}"] = background
             # Calculate Z scores
             z_score = _calculate_z_score(observation, background)
