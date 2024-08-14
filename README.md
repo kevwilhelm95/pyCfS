@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.14.8 <br>
+Version 0.0.15.1 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -52,13 +52,15 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
 - `pyCFS.Structure`
     - `lollipop_plot`
     - `protein_structures`
+- `pyCFS.Summarize`
+    - `prioritize_genes`
 
 # Modules
 
 ## pyCFS.Combine
 
 ### `consensus()`
-Combines multiple lists of genes, counts occurrences of each gene, and tracks the lists they came from.
+Combines multiple lists of genes by counting the number of times a gene mets significance in each method. This function will return a table with genes, the number of times it reaches significance, and where they came from, if list_names is assigned. We suggest prioritizing genes that reach significance in at least 2 methods, where increased stringency can come from reaching significance in more than 2 methods.
 #### Parameters:
 - **Optional**:
     - `gene_dict` (dict): Dict of gene lists if more than 6. {Name: [gene1, gene2, ...]} format
@@ -78,7 +80,7 @@ Combines multiple lists of genes, counts occurrences of each gene, and tracks th
 
 ### `functional_clustering()`
 `Parallelized` <br>
-Clusters genes from multiple sources in STRING network 
+Clusters genes from multiple sources in STRING network. Can be used as a "functional consensus" to prioritize genes across methods or to cluster prioritized genes with gold standards, uncovering functional biology related to known genes. When using, we suggest you threshold the clusters at those with 2 or more genes in a cluster
 #### Parameters:
 - `genes_1` (list): list of genes
 - **Optional**:
@@ -97,6 +99,7 @@ Clusters genes from multiple sources in STRING network
     - `pathways_max_group_size` (int): Maximum group size for pathway enrichment (Default = 100).
     - `cores` (int): # of cores for parallelization (Default = 1).
     - `savepath` (str): File path. If not provided, no files are saved
+    - `verbose` (int): Verbosity argument. Default = 0 (No verbose)
 #### Returns:
 - `pd.DataFrame` : Pairwide edges from true connection network. Formatted as STRING network.
 - `pd.DataFrame` : Table of query genes, their true clusters, and gene sources.
@@ -104,7 +107,7 @@ Clusters genes from multiple sources in STRING network
 
 
 ### `statistical_combination()`
-Statistical p-value combination methods
+Statistical p-value combination methods, including Cauchy, MCM, CMC, Minimum p, and P multiplication. We suggest using a p-value threshold of 1e-4 for genes scored by all methods, and a p-value threshold of 5e-8 for those scored by fewer methods.
 #### Parameters
 - `df_1` (pd.DataFrame): Two-column df with genes (col1) and p-value (col2). No specific header format.
 - `df_2` (pd.DataFrame): Two-column df with genes (col1) and p-value (col2).
@@ -124,7 +127,7 @@ Statistical p-value combination methods
 
 ## pyCFS.GoldStandards
 ### `string_enrichment()`
-Assess gene set network connectivity and functional enrichment
+Assess gene set network connectivity and functional enrichment using the STRING API. Returns the same results as if you were using the web-browser website (string-db.org).
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
@@ -143,7 +146,7 @@ Assess gene set network connectivity and functional enrichment
 
 
 ### `goldstandard_overlap()`
-Assess the overlap with a reference gene set.
+Assess the overlap with a reference gene set, tested using a hypergeometric test.
 #### Parameters:
 - `query` (list): List of query genes
 - `goldstandard` (list): List of gold standard genes
@@ -163,7 +166,7 @@ Assess the overlap with a reference gene set.
 
 ### `ndiffusion()`
 `Parallelized` <br>
-Assess the broad network connectivity between two gene sets in the STRING network. (Can take approx. 40 minutes for 'all' edge confidence with 5 cores and 100 random iterations)
+Assess the broad network connectivity between two gene sets in the STRING network. (Can take approx. 40 minutes for 'all' edge confidence with 5 cores and 100 random iterations). Significance is computed using z-test against the AUROC of 100 random background sets.
 #### Parameters:
 - `set_1` (list): List of genes
 - `set_2` (list): List of genes
@@ -177,6 +180,7 @@ Assess the broad network connectivity between two gene sets in the STRING networ
     - `n_iter` (int): # of randomizations to perform (Default = 100).
     - `cores` (int): # of cores for parallelization (Default = 1).
     - `savepath` (str): Path for saving.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `Image`: AUROC plot for show_1 (Most often "from Set1 Exclusive to Set2")
 - `float`: Z-score for show_1 AUROC (randomized set1, degree-matched)
@@ -186,7 +190,7 @@ Assess the broad network connectivity between two gene sets in the STRING networ
 
 ### `interconnectivity()`
 `Parallelized` <br>
-Assess the level of direct connections with reference gene set in the STRING network.
+Assess the level of direct connections with reference gene set in the STRING network. Significance is determined by z-test against the number of true connections for 100 random degree-matched gene sets.
 #### Parameters:
 - `set_1` (list): List of genes.
 - `set_2` (list): List of genes. 
@@ -205,6 +209,7 @@ Assess the level of direct connections with reference gene set in the STRING net
     - `plot_query_color` (str): Line color for enrichment plot (Default = red).
     - `plot_background_color` (str): Distribution color for enrichment plot (Default = gray).
     - `savepath` (str): File path.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `Image` : Venn diagram of list overlap.
 - `Image` : Random connection histogram with true query connections.
@@ -215,7 +220,7 @@ Assess the level of direct connections with reference gene set in the STRING net
 
 ### `gwas_catalog_colocalization()`
 `Parallelized` <br>
-Assess the enrichment for co-localization within X Mbp of genome-wide significant loci.
+Assess the enrichment for co-localization within X Mbp of genome-wide significant loci. Enrichment is determined using a Fisher's exact test.
 #### Parameters:
 - `query` (list): List of genes:
 - **Optional**:
@@ -234,7 +239,7 @@ Assess the enrichment for co-localization within X Mbp of genome-wide significan
 
 ### `pubmed_comentions()`
 `Parallelized` <br>
-Assess the enrichment for co-mentions with specific keywords in PubMed.
+Assess the enrichment for co-mentions with specific keywords in PubMed. Significance is determined by a z-test against 100 random gene sets of equal size to query.
 #### Parameters:
 - `query` (list): List of genes.
 - **Optional**:
@@ -252,6 +257,7 @@ Assess the enrichment for co-mentions with specific keywords in PubMed.
     - `plot_fontface` (str): Default = Avenir.
     - `plot_fontsize` (int): Default = 14.
     - `savepath` (str): File path.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `pd.DataFrame` : Dataframe of genes, co-mention counts, and PMIDs.
 - `dict` : Keys = enrichment_cutoffs values; Values = (# of query genes, z score).
@@ -264,7 +270,7 @@ Assess the enrichment for co-mentions with specific keywords in PubMed.
 ## pyCFS.Clinical
 ### `mouse_phenotype_enrichment()`
 `Parallelized` <br>
-Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data parsed and downloaded from OpenTargets).
+Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data parsed and downloaded from OpenTargets). Enrichment is assessed using z-test against 5,000 random representation-matched genes (the number of models for a gene in MGI). 
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
@@ -276,6 +282,7 @@ Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data 
     - `plot_labels_to_show` (list): Phenotype labels to plot. Use labels in "modelPhenotypeLabel" of output dataframe.
     - `cores` (int): Default = 1.
     - `savepath` (str): File path.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `pd.DataFrame` : Enrichment summary.
 - `Image` : Strip plot of enrichment.
@@ -284,7 +291,7 @@ Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data 
 
 ### `protein_family_enrichment()`
 `Parallelized` <br>
-Assess enrichment of protein family type from OpenTargets data.
+Assess enrichment of protein family type from OpenTargets data. Enrichment is determined with a z-test against 5000 random gene sets.
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
@@ -296,7 +303,8 @@ Assess enrichment of protein family type from OpenTargets data.
     - `plot_fontface` (str): Default = Avenir.
     - `plot_fontsize` (int): Default = 14.
     - `cores` (int): For parallelization (Default = 1).
-    - `savepath` (str): File path
+    - `savepath` (str): File path.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `pd.DataFrame` : Enrichment dataframe for protein families.
 - `Image` : Horizontal strip plot of enrichment.
@@ -305,7 +313,7 @@ Assess enrichment of protein family type from OpenTargets data.
 ### `tissue_expression_enrichment()`
 
 ### `depmap_enrichment()`
-Assess enrichment for cancer-dependent genes.
+Assess enrichment for cancer-dependent genes. Significance is determined by a Mann Whitney U test against background scores.
 #### Parameters:
 - `query` (list) : List of genes
 - `cancer_type` (list) : List of cancer cell types (Available cancer cell types can be found at - https://depmap.org/portal/ > Tools > Cell Line Selector > Create custom list (Broad types = Lineage, Most specific = Lineage Sub-subtype))
@@ -316,6 +324,7 @@ Assess enrichment for cancer-dependent genes.
     - `plot_query_color` (str) : Default = red.
     - `plot_background_color` (str) : Default = gray.
     - `savepath` (str) : File path
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns
 - `float` : P-value of Mann Whitney U test
 - `Image` : Histogram of Chronos DepMap scores for query and background genes
@@ -330,6 +339,7 @@ Pulls drug-gene interactions in order to find potential repurposable therapies.
     - `dgidb_min_citations` (int) : DGIdb-specific. Minimum number of citations noting drug-gene interaction. Default = 1
     - `approved` (bool) : Filter for FDA-approved or not drugs. Default = True.
     - `savepath` (str) : File path
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `dict` : Resource name and drug interactors (e.g. {'DGIdb': pd.DataFrame})
 
@@ -366,10 +376,12 @@ Notes: If multiple models are input (e.g. ['RF', 'LR', 'GB']), the three models 
     - `rfe_min_feature_ratio` (float): Ratio to set the minimum number of features to keep (e.g. 0.5 represents at minimum, keep 50% of the features). Default = 0.5.
     - `cores` (int): Number of cores for parallel rfe and hyperparameter optimization. Default = 1
     - `savepath` (str): Path to save the output files.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `Image`: Distribution of evaluation/test samples with calculated odds ratios
 - `Image`: Evaluation/test sample AUROC curve
 - `pd.DataFrame`: Table showing probability of case/control for evaluation/test samples.
+- `pd.DataFrame`: Table of feature importance scores for each feature.
 
 ### `odds_ratios` under work
 `Parallelized` <br>
@@ -377,7 +389,7 @@ Takes the variants_by_sample output and performs odds ratio calculations based o
 #### Parameters:
 - `variants_by_sample` (pd.DataFrame): Output from the variants_by_sample function.
 - `samples` (pd.DataFrame): Two-column dataframe for samples to calculate odds ratios on. First column = sample_ids. Second column = CaseControl (1/0).
-- `genes` (list): List of genes to analyze
+- `query` (list): List of genes to analyze
 - **Optional**:
     - `model` (str): Model to calculate odds ratios. Options = ['dominant', 'recessive']. Dominant model includes both heterozygous and homozygous variants. Recessive model only analyzes homozygous variants. Default = 'dominant'
     - `level` (str): Level of analysis. Options = ['variant', 'gene', 'domain']. Variant analyzes variant-by-variant. Gene analyzes gene-collapsed odds ratios. Domain analyzes protein-domains annotated by Evidence and Conclusion Ontology (ECO). Default = 'variant'.
@@ -390,6 +402,7 @@ Takes the variants_by_sample output and performs odds ratio calculations based o
     - `show_plot_labels` (bool): Toggle to show result plot labels for significant findings. Default = True.
     - `cores` (int): Number of cores for parallelization. Default = 1.
     - `savepath` (str): Path for saving.
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `pd.DataFrame`: Aggregated counts of variants transformed from the variants_by_sample output. Note: The output is filtered according to the optional parameters above (e.g. if max_af = 0.01, the dataframe will only contain aggregated variant counts for variants with AF < 1%).
 - `pd.DataFrame`: Table of resulting odds ratios calculated, their p-values, and FDR corrections.
@@ -397,7 +410,7 @@ Takes the variants_by_sample output and performs odds ratio calculations based o
 
 
 ### `ea_distributions`
-Takes the odds_ratio output dataframe and tests EA score distribution, using the Kolmogorov-Smirnov test, differences within a gene for two sets of patients.
+Takes the odds_ratio output dataframe and tests EA score distribution differences within a gene for two sets of patients, using the Kolmogorov-Smirnov test. !! To maximize usability, run odds_ratios for all allele frequencies and ea scores and use that exact_test_file for ea_distributions
 #### Parameters:
 - `variants_or` (pd.DataFrame): Aggregated variants output from odds_ratios()
 - `genes` (list): List of genes to analyze EA distributions.
@@ -418,7 +431,7 @@ Takes the odds_ratio output dataframe and tests EA score distribution, using the
 
 ## pyCFS.Structure
 ### `lollipop_plot()`
-Generates a lollipop plot given case and control variants and tests odds ratios (for 'both' only).
+Generates a lollipop plot given case and control variants and tests odds ratios (for 'both' only) using a Fisher's exact test.
 #### Parameters:
 - `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to plot ("PDGFRB")
@@ -434,6 +447,7 @@ Generates a lollipop plot given case and control variants and tests odds ratios 
     - `ea_color` (str): Color scale for Lollipop and Linear structure. Default = 'prismatic'. Options = ['prismatic', 'gray_scale', 'EA_bin', 'black']
     - `domain_min_dist` (int): The minimum distance that separates protein domains. Default = 20
     - `savepath` (str): Directory to save
+    - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns:
 - `Image`: Lollipop plot
 - `float`: P-value of Odds Ratio
@@ -444,7 +458,7 @@ Generates a lollipop plot given case and control variants and tests odds ratios 
 
 ### `protein_structures()`
 `Parallelized` <br>
-Generates a Pymol script to visualize variant location in 3D protein structure colored with Evolutionary Trace. Variants mapped to protein will also be tested for structural clustering using the SCW method [PMID: 12875851] using all variants, case variants, and control variants. 
+Generates a Pymol script to visualize variant location in 3D protein structure (AlphaFold) colored with Evolutionary Trace. Variants mapped to protein will also be tested for structural clustering using the SCW method [PMID: 12875851] using all variants, case variants, and control variants. 
 #### Parameters:
 - `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to analyze ("PDGFRB")
@@ -466,3 +480,24 @@ Generates a Pymol script to visualize variant location in 3D protein structure c
 - `Image` : Clustering enrichment plot for all variants meeting criteria (both cases & controls)
 - `Image` : Clustering enrichment plot for case variants meeting criteria
 - `Image` : Clustering enrichment plot for control variants meeting criteria
+
+
+
+## pyCFS.Structure
+### `prioritize_genes()`
+An evidence-based gene prioritization schema, ranking genes based on levels of evidence in previous validation criteria. Results can either be loaded using "result_dict" for in-script files or "result_path", which automatically load the outputs declared by "result_experiments".
+#### Parameters:
+- `query` (list): List of query genes
+- **Optional**:
+    - `result_dict` (dict): Dictionary of output files annotated with their experiment. Valid experiments and the required file types include: {'p_value': pd.DataFrame, 'goldstandard_overlap': list, 'gwas_catalog_colocalization': pd.DataFrame, 'interconnectivity': pd.DataFrame, 'functional_clustering': pd.DataFrame, 'functional_clustering_enrichment':dict, 'pubmed_comentions': pd.DataFrame, 'depmap_enrichment': pd.DataFrame, 'risk_prediction': pd.DataFrame, 'odds_ratios': pd.DataFrame, 'mouse_phenotype_enrichment': pd.DataFrame, 'drug_gene_interactions': pd.DataFrame}
+    - `result_path` (str): Path to parent directory of outputs from previous experiments
+    - `result_experiments` (list): List of experiments that should be loaded from the result_path.
+    - `score_method` (str): Options include "rank" (default) or "binary". For rank, evidence scores will be ranked based on number of significant findings then normalized to a range of 1 (highest) to 0 (lowest). For binary, each gene will be tested for positive criteria and will be given 1 if so and 0 aif not.
+    - `p_value_col` (str): Column name of the p-value/q-value/fdr column to use when loading "p_value". Default = 'fdr'.
+    - `or_directories` (list): List of directory names for odds ratios results (i.e. domain_dominant_EA-0-100_AF-0.0-0.01_missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost)
+    - `or_threshold` (float): FDR threshold for considering significant odds ratios. Default = 0.1.
+    - `mgi_groups` (list): List of high-level mouse phenotypes to filter for significant findings in ranking. Default = 'all'. Options include: ['hematopoietic system', 'homeostasis/metabolism', 'cardiovascular system','embryo', 'cellular', 'growth/size/body region', 'nervous system', 'renal/urinary system', 'liver/biliary system', 'craniofacial', 'digestive/alimentary', 'hearing/vestibular/ear', 'limbs/digits/tail', 'skeleton', 'behavior/neurological', 'mortality/aging', 'reproductive system', 'neoplasm', 'vision/eye', 'respiratory system', 'normal', 'endocrine/exocrine gland', 'integument', 'adipose tissue', 'muscle', 'taste/olfaction', 'pigmentation phenotype']
+    - `depmap_ranking` (str): Method to rank depmap scores for query genes. Default = 'tumor_suppressor', in which more negative scores receive higher ranking. For 'oncogene', more positive scores receive a higher ranking.
+    - `drug_source` (str): Selection for "result_path" to select drug source. Options include "all" (default), "DGIdb" and "OpenTargets".
+    - `show_indiv_scores` (bool): Toggle to output each individual experiments scores in the output dataframe.
+    - `savepath` (str): Directory to save

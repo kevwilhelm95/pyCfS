@@ -35,7 +35,7 @@ import networkx as nx
 from Bio import Entrez
 import concurrent.futures
 from itertools import repeat
-from .utils import _hypergeo_overlap, _format_scientific, _fix_savepath, _define_background_list, _clean_genelists, _load_grch38_background,_load_clean_string_network, _get_edge_weight
+from .utils import _hypergeo_overlap, _fix_savepath, _define_background_list, _clean_genelists, _load_grch38_background,_load_clean_string_network, _get_edge_weight
 
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -93,10 +93,10 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list, pval:f
         Image: An image object of the Venn diagram. If there is no overlap or the query is empty, returns False.
     """
     if len(overlap) == 0:
-        print("No overlapping genes to plot")
+        warnings.warn("No overlapping genes to plot")
         return False
     elif query_len == 0:
-        print("No genes found in query")
+        warnings.warn("No genes found in query")
         return False
     # Create Venn Diagram
     plt.rcParams.update({'font.size': fontsize,
@@ -190,6 +190,9 @@ def goldstandard_overlap(query: list, goldstandard:list, custom_background:Any =
         with open(new_savepath + "GoldStandard_Overlap_Summary.txt", 'w') as f:
             f.write(f"Overlapping genes: {overlapping_genes}\n")
             f.write(f"P-value: {pval}")
+        # Write gold standard file for prioritization table
+        with open(new_savepath + "GoldStandards.txt", 'w') as f:
+            f.write("\n".join(goldstandard))
 
     return overlapping_genes, pval, image
 #endregion
@@ -419,7 +422,7 @@ def _string_api_call(version:str, genes:list, method:str, score_threshold:float,
         raise ValueError("Error: " + response.text)
     return response.content
 
-def string_enrichment(query:list, string_version:str = 'v11.0', edge_confidence:str = 'medium', species:int = 9606, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False) -> tuple:
+def string_enrichment(query:list, string_version:str = 'v11.0', edge_confidence:str = 'medium', species:int = 9606, plot_fontsize:int = 14, plot_fontface:str = 'Avenir', savepath:Any = False, verbose:int = 0) -> tuple:
     """
     Performs STRING enrichment analysis for a given list of genes.
 
@@ -446,7 +449,8 @@ def string_enrichment(query:list, string_version:str = 'v11.0', edge_confidence:
     version_b = _string_api_call(version = string_version, genes = query, method = 'version', score_threshold = edge_weight, species = species)
     version = pd.read_csv(io.StringIO(version_b.decode('utf-8')), sep = '\t')
     version = version.loc[0, 'string_version']
-    print(f"STRING API version: {version}")
+    if verbose > 0:
+        print(f"STRING API version: {version}")
 
     # Get the STRING interactions network file
     network = _string_api_call(version = string_version, genes = query, method = 'network_interactions', score_threshold = edge_weight, species = species)
@@ -578,7 +582,7 @@ def _get_degree(pred_node:list, node_degree:dict) -> dict:
     pred_degree_count = dict(Counter(pred_degree))
     return pred_degree_count
 
-def _parse_gene_input(fl1:list, fl2:list, graph_node:list, graph_node_index:dict, node_degree:dict) -> (dict, dict, dict, dict): # type: ignore
+def _parse_gene_input(fl1:list, fl2:list, graph_node:list, graph_node_index:dict, node_degree:dict, verbose: int = 0) -> (dict, dict, dict, dict): # type: ignore
     """
     Parses the input files and maps genes into the network.
 
@@ -613,7 +617,8 @@ def _parse_gene_input(fl1:list, fl2:list, graph_node:list, graph_node_index:dict
     other = list(set(graph_node) - set(group1_node) - set(group2_node))
     group1_only_node = list(set(group1_node)-set(overlap_node))
     group2_only_node = list(set(group2_node)-set(overlap_node))
-    print("{} genes are mapped (out of {}) in {}\n {} genes are mapped (out of {}) in {}\n {} are overlapped and mapped (out of {})\n".format(len(group1_node), len(group1), fl1_name, len(group2_node), len(group2), fl2_name, len(overlap_node), len(overlap)))
+    if verbose > 0:
+        print("{} genes are mapped (out of {}) in {}\n {} genes are mapped (out of {}) in {}\n {} are overlapped and mapped (out of {})\n".format(len(group1_node), len(group1), fl1_name, len(group2_node), len(group2), fl2_name, len(overlap_node), len(overlap)))
     ### Getting indexes of the genes in the network node list
     group1_only_index = _get_index(group1_only_node, graph_node_index)
     group2_only_index = _get_index(group2_only_node, graph_node_index)
@@ -915,8 +920,6 @@ def _get_rand_degree(pred_degree_count: list, degree_nodes: list, iteration: int
                 lst.remove(item)
         rand_node += lst
         rand_degree[i] += lst
-    #print(rand_degree)
-    #print(rand_node)
     return rand_node
 
 def _run_rand_parallelized(node_degree_count:list, node_index:list, degree_nodes:list, other:dict, graph_node_index:list, graph_node:list, ps:csr_matrix, rand_type:str, node_type:str, repeat:int, diffuse_matrix:bool=False, cores:int = 1) -> (list, list, list): # type: ignore
@@ -1378,7 +1381,7 @@ def _write_sum_txt(result_fl: str, group1_name: str, group2_name: str, gp1_only_
             file_hand.writelines("%s\n" % val)
     file_hand.close()
 
-def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:str = 'Set_2', string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'all', custom_background:Any = 'string', n_iter: int = 100, cores:int =1, savepath:str = False) -> (Image, float, Image, float): # type: ignore
+def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:str = 'Set_2', string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'all', custom_background:Any = 'string', n_iter: int = 100, cores:int =1, savepath:str = False, verbose: int = 0) -> (Image, float, Image, float): # type: ignore
     """
     Performs network diffusion analysis between two sets of genes.
 
@@ -1418,7 +1421,7 @@ def ndiffusion(set_1: list, set_2: list, set_1_name:str = 'Set_1', set_2_name:st
     ps = _get_diffusion_param(adj_matrix)
     graph_node_index = _get_index_dict(graph_node)
     gp1_only_dict, gp2_only_dict, overlap_dict, other_dict =_parse_gene_input(
-        set_1, set_2, graph_node, graph_node_index, node_degree
+        set_1, set_2, graph_node, graph_node_index, node_degree, verbose = verbose
     )
     degree_nodes = _get_degree_node(g_degree, node_degree, other_dict['node'])
     gp1_all_dict, gp2_all_dict, exclusives_dict = _check_overlap_dict(overlap_dict, gp1_only_dict, gp2_only_dict)
@@ -2076,7 +2079,7 @@ def _process_random_set(iteration:int, unique_gene_sets:dict, background_genes:l
         random_connections = _get_unique_gene_network_bw_method_connections(random_unique_gene_network, random_unique_genes)
         return len(random_connections)
     except Exception as e:
-        print(f"An error occurred during processing: {e}")
+        warnings.warn(f"An error occurred during processing: {e}")
         return None
 
 def _parallel_random_enrichment(unique_gene_sets:dict, background_genes:list, string_net_all_genes:pd.DataFrame, string_net_degree_df:pd.DataFrame, string_net:pd.DataFrame, num_iterations:int, num_processes:int) -> list:
@@ -2108,7 +2111,7 @@ def _parallel_random_enrichment(unique_gene_sets:dict, background_genes:list, st
 
     return random_sets_connections
 
-def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, string_version:str = 'v11.0', custom_background:Any = 'string', savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red') -> (Image, Image, list, pd.DataFrame, dict): # type: ignore
+def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = None, set_5:list = None, string_version:str = 'v11.0', custom_background:Any = 'string', savepath:Any = False, evidences:list = ['all'], edge_confidence:str = 'highest', num_iterations: int = 250, cores: int = 1, plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_background_color:str = 'gray', plot_query_color: str = 'red', verbose:int = 0) -> (Image, Image, list, pd.DataFrame, dict): # type: ignore
     """
     Analyzes gene set interconnectivity and visualizes the results, returning multiple outputs
     including images, lists, and data structures.
@@ -2206,8 +2209,9 @@ def interconnectivity(set_1:list, set_2:list, set_3:list = None, set_4:list = No
             f.write('Number of b/w set connects in real gene sets:'+ str(len(true_connections)) + '\n')
             f.write('Z-score based on curve fit:' + str(z_fit))
         f.close()
-    print('Number of b/w set connects in real gene sets:', len(true_connections))
-    print('Z-score based on curve fit:', z_fit)
+    if verbose > 0:
+        print('Number of b/w set connects in real gene sets:', len(true_connections))
+        print('Z-score based on curve fit:', z_fit)
     return venn_image, enrich_image, random_sets_connections, unique_gene_network, query_gene_sources
 #endregion
 
@@ -2256,7 +2260,7 @@ def _map_mondo_efo_id(mondo_id: str) -> Any:
         efo_term = efo_term.replace(":", "_")
         return efo_term
 
-def _pull_gwas_catalog(mondo_id:str, p_upper:float) -> pd.DataFrame:
+def _pull_gwas_catalog(mondo_id:str, p_upper:float, verbose: int = 0) -> pd.DataFrame:
     """
     Pulls GWAS (Genome-Wide Association Studies) catalog data for a given MONDO ID and filters the results based on a p-value threshold.
 
@@ -2279,8 +2283,8 @@ def _pull_gwas_catalog(mondo_id:str, p_upper:float) -> pd.DataFrame:
         mondo_id = _map_mondo_efo_id(mondo_id)
     if not mondo_id:
         raise ValueError(f"No EFO term found for {mondo_id}, please download and add the path to the table.")
-
-    print(f"Querying GWAS Catalog API for {mondo_id}")
+    if verbose > 0:
+        print(f"Querying GWAS Catalog API for {mondo_id}")
     api_url = f"https://www.ebi.ac.uk/gwas/api/v2/efotraits/{mondo_id}/associations/download?includeBgTraits=True&includeChildTraits=True"
     response = requests.get(api_url)
 
@@ -2297,7 +2301,7 @@ def _pull_gwas_catalog(mondo_id:str, p_upper:float) -> pd.DataFrame:
         df.set_index('STRONGEST SNP-RISK ALLELE', inplace = True)
         return df, mondo_id
     else:
-        print(f"Status code exited with error: {response.status_code}")
+        warnings.warn(f"Status code exited with error: {response.status_code}")
         raise ValueError(f"Cannot download summary statistics for {mondo_id}, please download and add the path to the table.")
 
 def _check_query_against_index(query_genes:list, ref_gene_index:list) -> list:
@@ -2319,7 +2323,7 @@ def _check_query_against_index(query_genes:list, ref_gene_index:list) -> list:
     matching_genes = [gene for gene in query_genes if gene.upper() in ref_gene_index]
     unmatched_genes = [gene for gene in query_genes if gene.upper() not in ref_gene_index]
     if unmatched_genes:
-        print(f"The following genes were not found in the reference gene index: {', '.join(unmatched_genes)}")
+        warnings.warn(f"The following genes were not found in the reference gene index: {', '.join(unmatched_genes)}")
     return matching_genes
 
 def _find_snps_within_range(query_genes:list, ref_gene_index:list, geneloci:pd.DataFrame, gwasloci:pd.DataFrame, query_distance:int) -> dict:
@@ -2488,7 +2492,7 @@ def _calculate_fishers_exact(gene_snp_dict:dict, all_gene_dict:dict, final_genes
     _, pval = fisher_exact(np.array([[tp, fp], [fn, tn]]), alternative='greater')
     return tp, fp, fn, tn, pval
 
-def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_path:str = False, gwas_p_thresh: float = 5e-8, distance_mbp:float = 0.5, custom_background:Any = 'ensembl', cores:int = 1, savepath:Any = False, save_summary_statistics:bool = False) -> (pd.DataFrame, float): # type: ignore
+def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_path:str = False, gwas_p_thresh: float = 5e-8, distance_mbp:float = 0.5, custom_background:Any = 'ensembl', cores:int = 1, savepath:Any = False, save_summary_statistics:bool = False, verbose: int = 0) -> (pd.DataFrame, float): # type: ignore
     """
     Performs colocalization analysis between a list of query genes and GWAS catalog SNPs.
 
@@ -2516,7 +2520,7 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     """
     # Load GWAS Summary Stats
     if mondo_id:
-        gwas_catalog, mondo_id = _pull_gwas_catalog(mondo_id, gwas_p_thresh)
+        gwas_catalog, mondo_id = _pull_gwas_catalog(mondo_id, gwas_p_thresh, verbose = verbose)
     elif gwas_summary_path:
         gwas_catalog = pd.read_csv(gwas_summary_path, sep = '\t')
         gwas_catalog = gwas_catalog[gwas_catalog['P-VALUE'] <= gwas_p_thresh]
@@ -2528,18 +2532,18 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     query = _check_query_against_index(query, gene_locations.index)
     gwas_catalog = gwas_catalog[['CHR_ID', 'CHR_POS', 'MAPPED_GENE']].drop_duplicates()
     # Run colocalization for query
-    print("Running query genes")
     query_chunks = _chunk_data(query, cores)
     query_gene_dicts = _run_parallel_query(_find_snps_within_range, query_chunks, gwas_catalog.index, gene_locations, gwas_catalog, distance_bp, cores)
     query_snp_dict = _combine_dicts(query_gene_dicts)
     query_snp_df = pd.DataFrame(query_snp_dict.items(), columns=['Gene', 'SNPs'])
+    query_snp_df = query_snp_df.set_index('Gene')
     final_genes = _get_genes_with_snps(query_snp_dict)
     # Run colocalization for background
-    print("Running background genes")
     background_dict, background_name = _define_background_list(custom_background)
     background_genes = background_dict[background_name]
     clean = [x for x in background_genes if x in gene_locations.index]
-    print(f"Background genes mapped: {len(clean)}/{len(background_genes)}")
+    if verbose > 0:
+        print(f"Background genes mapped: {len(clean)}/{len(background_genes)}")
     bg_new = gene_locations[gene_locations.index.isin(clean)]
     # Chunk the background genes for faster parsing
     bg_chunks = _chunk_data(bg_new.index.tolist(), cores)
@@ -2554,7 +2558,7 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
         os.makedirs(new_savepath, exist_ok=True)
         if save_summary_statistics:
             gwas_catalog.to_csv(new_savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}.csv", index = True)
-        query_snp_df.to_csv(new_savepath +f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_TP.csv", index = False)
+        query_snp_df.to_csv(new_savepath +f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_TP.csv", index = True)
         with open(new_savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}_Summary.txt", "w") as f:
             f.write(f"TP = {tp}\n")
             f.write(f"FP = {fp}\n")
@@ -2648,7 +2652,7 @@ def _entrez_search(gene:str, disease:str, custom_terms:str, email:str, api_key:s
             if attempt < retries - 1:
                 time.sleep(10)
             else:
-                print(f'Error: {e}')
+                warnings.warn(f'Error: {e}')
                 return None
 
 def _parse_entrez_result(result:dict) -> (str, int): # type: ignore
@@ -2729,9 +2733,12 @@ def _fetch_query_pubmed(query: list, keyword: str, custom_terms:str, email: str,
     # Sort the output data frame by the count of related papers in descending order
     sorted_out_df = out_df.sort_values(by='Count', ascending=False)
 
+    # Clean up the file
+    sorted_out_df = sorted_out_df.rename(columns = {'Count': 'PubMed_CoMentions-' + col_name})
+
     return sorted_out_df
 
-def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, email: str, api_key: str, cores: int, field:str, trials:int, background_genes:list) -> list:
+def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, email: str, api_key: str, cores: int, field:str, trials:int, background_genes:list, verbose: int = 0) -> list:
     """
     Performs PubMed queries on random sets of genes and records the number of papers
     associated with a disease for each gene in the set.
@@ -2751,11 +2758,10 @@ def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, emai
     randfs = []
     if len(background_genes) == 0:
         background_genes = _load_grch38_background()
-    print(f'Pulling Publications for {trials} random gene sets of {len(query)} genes')
 
     for i in range(trials):
-        if i % 10 == 0:
-            print(f" Random Trial : {i}")
+        if i % 10 == 0 and verbose > 0:
+                print(f" Random Trial : {i}")
         rng = np.random.default_rng(i*3)
         randgenes = rng.choice(background_genes, size = len(query), replace = False).tolist()
         tempdf = pd.DataFrame(columns=['Count'])
@@ -2768,7 +2774,7 @@ def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, emai
                 gene, n_paper_dis = _parse_entrez_result(result)
                 n_paper_dis = result.get('Count', 0)
                 tempdf.loc[gene, 'Count'] = int(n_paper_dis)
-
+            tempdf = tempdf.rename(columns = {'Count': 'PubMed_CoMentions-' + disease_query})
         # Append the temporary DataFrame to the list
         randfs.append(tempdf)
 
@@ -2826,7 +2832,7 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
 
     return image
 
-def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False) -> (pd.DataFrame, dict, dict): # type: ignore
+def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, dict, dict): # type: ignore
     """
     Searches PubMed for comention of genes within articles related to a given field and
     performs a randomization test to compute Z-scores for observed mention counts.
@@ -2859,12 +2865,12 @@ def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = Fals
     if run_enrichment:
         background_dict, background_name = _define_background_list(custom_background)
         background_genes = background_dict[background_name]
-        rand_dfs = _fetch_random_pubmed(query, keyword, custom_terms, email, api_key, workers, field, enrichment_trials, background_genes)
+        rand_dfs = _fetch_random_pubmed(query, keyword, custom_terms, email, api_key, workers, field, enrichment_trials, background_genes, verbose = verbose)
         enrich_results, enrich_images = {}, {}
         rand_result_df = pd.DataFrame({'Iteration': range(0, len(rand_dfs))})
         for min_thresh, max_thresh in enrichment_cutoffs:
-            observation = query_comention_df[(query_comention_df['Count'] > min_thresh) & (query_comention_df['Count'] <= max_thresh)].shape[0]
-            background = [tmp[(tmp['Count'] > min_thresh) & (tmp['Count'] <= max_thresh)].shape[0] for tmp in rand_dfs]
+            observation = query_comention_df[(query_comention_df['PubMed_CoMentions-' + output_name] > min_thresh) & (query_comention_df['PubMed_CoMentions-' + output_name] <= max_thresh)].shape[0]
+            background = [tmp[(tmp['PubMed_CoMentions-'+output_name] > min_thresh) & (tmp['PubMed_CoMentions-' + output_name] <= max_thresh)].shape[0] for tmp in rand_dfs]
             rand_result_df[f"{min_thresh + 1},{max_thresh}"] = background
             # Calculate Z scores
             z_score = _calculate_z_score(observation, background)
@@ -2880,7 +2886,7 @@ def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = Fals
         savepath = _fix_savepath(savepath)
         new_savepath = os.path.join(savepath, f'PubMed_Comentions/{output_name}/')
         os.makedirs(new_savepath, exist_ok=True)
-        query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{output_name}_field-{field}.csv")
+        query_comention_df.to_csv(new_savepath + f"PubMedQuery_keyword-{output_name}_field-{field}.csv", index = True)
         if run_enrichment:
             rand_result_df.to_csv(new_savepath + f"PubMedQueryRandomResults_keyword-{output_name}_field-{field}.csv", index = False)
             for key, value in enrich_images.items():
