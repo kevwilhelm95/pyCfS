@@ -42,7 +42,6 @@ def _hypergeo_overlap(background_size: int, query_genes:int, gs_genes:int, overl
     n = gs_genes
     k = overlap
     pval = hypergeom.sf(k - 1, M, n, N)
-    print(f"pval = {pval}")
     return pval
 #endregion
 
@@ -184,7 +183,7 @@ def _validate_af_thresh(af_lower:float, af_upper:float) -> None:
     if af_upper > 1:
         raise ValueError("Upper threshold cannot be greater than 1.")
 
-def _define_background_list(background_:Any, just_genes: bool = True) -> (dict, str): # type: ignore
+def _define_background_list(background_:Any, just_genes: bool = True, verbose:int = 0) -> (dict, str): # type: ignore
     """
     Defines the background list based on the input background parameter.
 
@@ -215,7 +214,8 @@ def _define_background_list(background_:Any, just_genes: bool = True) -> (dict, 
             background_dict = {'ensembl':ensembl_bkgd}
     # Custom background
     elif isinstance(background_, list):
-        print(f"Custom background: {len(background_)} genes")
+        if verbose > 0:
+            print(f"Custom background: {len(background_)} genes")
         background_dict = {'custom':background_}
         background_name = 'custom'
 
@@ -423,7 +423,7 @@ def _clean_variant_formats(variants: pd.DataFrame) -> pd.DataFrame:
     new_variants = new_variants.reset_index(drop=True)
     return new_variants
 
-def _check_ensp_len(ensp:list) -> bool:
+def _check_ensp_len(ensp:list, verbose:int = 0) -> bool:
     """
     Check if all ENSP IDs in a list have the same length.
 
@@ -438,7 +438,8 @@ def _check_ensp_len(ensp:list) -> bool:
     elif len(ensp) == 1:
         return ensp
     elif len(ensp) > 1:
-        print(f"Multiple ENSP IDs found: {ensp}. Using {ensp[0]}")
+        if verbose > 0:
+            print(f"Multiple ENSP IDs found: {ensp}. Using {ensp[0]}")
         return ensp
     else:
         return ensp

@@ -16,7 +16,9 @@ import io
 import networkx as nx
 import ast
 import markov_clustering as mc
+import warnings
 from statsmodels.stats.multitest import multipletests
+import itertools
 import multiprocessing as mp
 from scipy.stats import hypergeom, percentileofscore
 import os
@@ -429,7 +431,7 @@ def _get_input_gene_network(gene_lst: list, network: pd.DataFrame) -> pd.DataFra
 
     return n_df_final
 
-def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Graph, dict): # type: ignore
+def _mcl_analysis(network_df:pd.DataFrame, inflation:Any, verbose:int = 0) -> (list, float, nx.Graph, dict): # type: ignore
     """
     Runs the MCL algorithm on a given network and returns the clusters, the inflation parameter used, the graph, and a dictionary of clusters.
 
@@ -490,7 +492,8 @@ def _mcl_analysis(network_df:pd.DataFrame, inflation:Any) -> (list, float, nx.Gr
             max_q_inflation = 3.0
             max_q = 3.0
         # Run MCL algorithm with optimized inflation parameter
-        print(response)
+        if verbose > 0:
+            print(response)
         result = mc.run_mcl(A, inflation = max_q_inflation)
         matrix = np.matrix(result)
         clusters = mc.get_clusters(matrix)
@@ -952,7 +955,7 @@ def _annotate_percentile_of_score(a:float , b:int) -> float:
         float: The percentile of the score in the list.
     """
     if np.isnan(b).all():
-        print("Warning: All background tests contain no edges. Please decrease edge confidence")
+        warnings.warn("Warning: All background tests contain no edges. Please decrease edge confidence")
         b = [1.0]
     return percentileofscore(b, a)
 
@@ -972,22 +975,18 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
     new_dict = {}
     for biological_group, cluster_dict in true_clusters_enrich_df_dict.items():
         for k, v in cluster_dict.items():
-            #try:
             summary_df = v
-            #print(f"1) Summary_df index: {summary_df.index}")
             summary_df['RandomIterationTopPvals'] = summary_df.index.map(pval_merged_tuple_set[biological_group])
-            #print(f"2) Summary_df index: {summary_df.index}")
             summary_df['TrueClusterRanking'] = summary_df.apply(lambda x: _annotate_percentile_of_score(x['pval'], x['RandomIterationTopPvals']), axis = 1)
-            #print(f"3) Summary_df index: {summary_df.index}")
             if k not in new_dict:
                 new_dict[k] = {}
             new_dict[k][biological_group] = summary_df
-            #except ValueError:
-                #print(f"Error: {k} has no edges in the network. Please adjust input genes or edge confidence threshold.")
-                #continue
+    # Get the combo of all biological groups
+    for key, value in new_dict.items():
+        new_dict[key]['combo'] = pd.concat([value['reactomes'], value['go_bp'], value['go_cc'], value['go_mf'], value['kegg'], value['wiki']], axis = 0)
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
+def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False, verbose:int = 0) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
     """
     Perform functional clustering analysis on a set of genes.
 
@@ -1034,8 +1033,9 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
     gene_sources, input_genes = _get_gene_sources(gene_sets)
     # returns network with connections b/w all input_genes
     true_gene_network = _get_input_gene_network(input_genes, string_net)
-    _, true_inflation_parameter, _, true_cluster_dict = _mcl_analysis(true_gene_network, inflation)
+    _, true_inflation_parameter, _, true_cluster_dict = _mcl_analysis(true_gene_network, inflation, verbose = verbose)
     true_cluster_dict, true_cluster_df = _sort_cluster_dict(true_cluster_dict, gene_sources)
+    true_cluster_df = true_cluster_df.set_index('gene')
     # Perform True Cluster Functional Enrichment
     true_clusters_enrichment_df_dict = _cluster_functional_enrichment(
         functional_groups, functional_groups_names, true_cluster_dict, background_genes
@@ -1068,7 +1068,7 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         # Save true gene network
         true_gene_network.to_csv(new_savepath + 'GeneSetNetwork.csv', index = False)
         # save true_cluster_dict
-        true_cluster_df.to_csv(new_savepath + 'TrueClusters.csv', index = False)
+        true_cluster_df.to_csv(new_savepath + 'TrueClusters.csv', index = True)
         # save random_sets
         with open(new_savepath + 'RandomSets_Clusters.txt', 'w') as f:
             for item in random_sets_clusters:
@@ -1168,8 +1168,9 @@ def _merge_p_inputs(dfs:dict) -> pd.DataFrame:
             df = df.copy()
             df = df[df.iloc[:, 1] <= 1]
             df.rename(columns = {df.columns[0]: "gene", df.columns[1]: f"p_{key}"}, inplace = True)
+            df = df.set_index('gene')
             if isinstance(new_df, pd.DataFrame):
-                new_df = new_df.merge(df, on = 'gene', how = 'inner')
+                new_df = df.merge(new_df, left_index = True, right_index = True, how = 'outer')
             else:
                 new_df = df
     return new_df
@@ -1208,10 +1209,10 @@ def _cauchy_combination_test(df: pd.DataFrame) -> pd.DataFrame:
     >>> df = pd.DataFrame({'gene': ['gene1', 'gene2'], 'study1': [0.01, 0.05], 'study2': [0.03, 0.02]})
     >>> combined_df = _cauchy_combination_test(df)
     """
-    trial = np.matrix(df.iloc[:, 1:])
+    trial = np.matrix(df.iloc[:, 0:].astype(np.float64))
     t_not = np.mean(np.tan((0.5 - trial) * np.pi), axis=1)
     p_cau = 0.5 - np.arctan(t_not) / np.pi
-    df['p.cauchy'] = p_cau
+    df['p.cauchy'] = [np.float64(x) for x in p_cau]
     return df
 
 def _min_p(df: pd.DataFrame) -> pd.DataFrame:
@@ -1360,7 +1361,7 @@ def _p_multiply(df: pd.DataFrame) -> pd.DataFrame:
     df['p.multiply'] = sub_df.prod(axis=1)
     return df
 
-def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, gene_df:pd.DataFrame = False, list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
+def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, gene_df:pd.DataFrame = pd.DataFrame(), list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
     """
     Combines statistical data from multiple DataFrames using various statistical methods.
 
@@ -1404,7 +1405,7 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     >>> df_combined = statistical_combination(df_1, df_2, df_3=df_3, savepath="path/to/save/")
     """
     # Prepare input
-    if isinstance(gene_df, bool):
+    if gene_df.empty:
         df_dict = {}
         df_list = [x for x in [df_1, df_2, df_3, df_4, df_5, df_6] if x is not False]
         if list_names:
@@ -1416,19 +1417,43 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
     else:
         clean_df = gene_df.copy()
     # Calculate CCT, minP
-    df = _cauchy_combination_test(clean_df)
-    df = _min_p(df)
-    # Calculate MCM and CMC
-    df = _mcm(df)
-    df = _cmc(df)
-    # Calcualte control - p-value multiplication
-    df = _p_multiply(df)
+    # Calculate CCT, minP
+    df_cols = [x for x in clean_df.columns if "p_" in x]
+    results = []
+
+    # Loop through column combinations, starting with the largest
+    for r in range(len(df_cols), 1, -1):
+        for comb in itertools.combinations(df_cols, r):
+            # Filter the DataFrame for rows where the selected combination is not NaN
+            subset_df = clean_df[list(comb)].dropna()
+            # Apply the sequence of functions
+            df = _cauchy_combination_test(subset_df)
+            df = _min_p(df)
+            df = _mcm(df)
+            df = _cmc(df)
+            df = _p_multiply(df)
+            # Add a column to keep track of which combination was used
+            df['combination'] = str(comb)
+            df['num_columns'] = len(comb)
+            # Append the processed DataFrame to the results list
+            results.append(df)
+
+    # Combine all the results
+    combined_df = pd.concat(results, axis=0, ignore_index=False)
+
+    # Sort to prioritize combinations with more columns
+    combined_df = combined_df.sort_values(by=['num_columns'], ascending=[False])
+
+    # Remove duplicates, keeping the one with the most columns
+    final_df = combined_df[~combined_df.index.duplicated(keep='first')]
+    final_df = final_df.sort_values(by = 'p.cauchy', ascending = True)
+    print(final_df.shape)
     if savepath:
         savepath = _fix_savepath(savepath)
         new_savepath = os.path.join(savepath, 'Statistical_Consensus/')
         os.makedirs(new_savepath, exist_ok=True)
-        df.to_csv(new_savepath + "StatisticalCombination.csv", index = False)
+        final_df.to_csv(new_savepath + "StatisticalCombination.csv", index = True)
 
-    return df
+    return final_df
 #endregion
 

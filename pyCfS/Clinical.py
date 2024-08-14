@@ -18,8 +18,9 @@ from typing import Any
 import io
 import os
 import math
+import warnings
 import multiprocessing
-from multiprocessing import Manager, Lock
+from multiprocessing import Manager
 from .utils import _fix_savepath, _load_open_targets_mapping, _get_avg_and_std_random_counts, _merge_random_counts, _define_background_list, _get_open_targets_gene_mapping
 
 #region Mouse Phenotype
@@ -61,7 +62,7 @@ def _get_pheno_counts(matrix:pd.DataFrame, gene_list:list) -> dict:
     df_dict = df.to_dict()['freq']
     return df_dict
 
-def _process_gene(mgi_df:pd.DataFrame, g:str, model_pheno_label_gene_mappings: dict, lock: multiprocessing.Lock) -> None:
+def _process_gene(mgi_df:pd.DataFrame, g:str, model_pheno_label_gene_mappings: dict, lock: multiprocessing.Lock) -> None: # type: ignore
     """
     Process a gene and update the model_pheno_label_gene_mappings dictionary.
 
@@ -77,11 +78,6 @@ def _process_gene(mgi_df:pd.DataFrame, g:str, model_pheno_label_gene_mappings: d
     for p in df_phenos:
         with lock:
             model_pheno_label_gene_mappings[p] = model_pheno_label_gene_mappings.get(p, []) + [g]
-        #if p in model_pheno_label_gene_mappings:
-            #print('true')
-            #model_pheno_label_gene_mappings[p].append(g)
-        #else:
-            #model_pheno_label_gene_mappings[p] = [g]
 
 def _get_pheno_gene_mappings(mgi_df: pd.DataFrame, mgi_genes: list, num_cores:int) -> dict:
     """
@@ -563,7 +559,7 @@ def _get_fdr_plot(summary_matrix:pd.DataFrame, bin_size:float, x_min:float, x_ma
     plt.close()
     return image
 
-def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image, Image): # type: ignore
+def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', random_iter:int = 5000, plot_sig_color:str = 'red', plot_q_threshold:float = 0.05, plot_show_labels:bool = False, plot_labels_to_show: list = [False], plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, Image, Image): # type: ignore
     """
     Performs a phenotype enrichment analysis on a list of genes using the Mouse Genome Informatics (MGI) database.
 
@@ -582,15 +578,16 @@ def mouse_phenotype_enrichment(query:list, custom_background:Any = 'ensembl', ra
     - strip_plot (matplotlib.pyplot): A strip plot of the enrichment analysis results.
     - fdr_plot (matplotlib.pyplot): A plot of the false discovery rate (FDR) distribution for the enrichment analysis results.
     """
-    background_dict, background_name = _define_background_list(custom_background, just_genes = True)
+    background_dict, background_name = _define_background_list(custom_background, just_genes = True, verbose = verbose)
     mgi_df, mgi_genes = _load_mouse_phenotypes()
     target_genes_pheno_counts = _get_pheno_counts(mgi_df, query)
     model_pheno_label_gene_mappings = _get_pheno_gene_mappings(mgi_df, mgi_genes, cores)
     # Summary - Write to file
-    print('# of target genes tested in MGI: {}/{}'.format(
-        len([x for x in query if x in mgi_genes]),
-        len(query)
-    ))
+    if verbose > 0:
+        print('# of target genes tested in MGI: {}/{}'.format(
+            len([x for x in query if x in mgi_genes]),
+            len(query)
+        ))
 
     #find number of times gene has a documented phenotype in MGI (similar to degree count in network-based analyses)
     mgi_genes_representation = _get_gene_representation(mgi_df, mgi_genes)
@@ -953,7 +950,7 @@ def _protein_class_strip_plot(df:pd.DataFrame, q_cut:float, sig_dot_color:str, f
     plt.close()
     return image
 
-def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False) -> (pd.DataFrame, Image): # type: ignore
+def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', level:list = ['all'], random_iter:int = 5000, plot_q_cut:float = 0.05, plot_sig_dot_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, cores:int = 1, savepath:Any = False, verbose: int = 0) -> (pd.DataFrame, Image): # type: ignore
     """
     Perform protein family enrichment analysis.
 
@@ -974,14 +971,15 @@ def protein_family_enrichment(query:list, custom_background:Any = 'ensembl', lev
         Image: Plot of the enrichment analysis.
     """
     # Get input data
-    background_dict, background_name = _define_background_list(custom_background, just_genes = True)
+    background_dict, background_name = _define_background_list(custom_background, just_genes = True, verbose = verbose)
     targets_class_df, targets_class_df_genelist = _get_family_files()
     # Get Level mappings
     target_class_level_gene_mappings = _get_level_gene_mappings(targets_class_df)
-    print('{}/{} target genes in Open Targets'.format(
-        len([x for x in query if x in targets_class_df_genelist]),
-        len(query))
-    )
+    if verbose > 0:
+        print('{}/{} target genes in Open Targets'.format(
+            len([x for x in query if x in targets_class_df_genelist]),
+            len(query))
+        )
     # Loop through each level
     levels = _map_level(level)
     out_level_dict = {}
@@ -1044,7 +1042,7 @@ def _load_depmap() -> (pd.DataFrame, list): # type: ignore
     df.set_index('depmap_id', inplace = True)
     return df, all_depmap
 
-def _check_cancer_type(df:pd.DataFrame, cancer_type:list) -> list:
+def _check_cancer_type(df:pd.DataFrame, cancer_type:list, verbose:int = 0) -> list:
     """
     Check if the given cancer types exist in any of the lineage columns of the DataFrame.
 
@@ -1066,15 +1064,16 @@ def _check_cancer_type(df:pd.DataFrame, cancer_type:list) -> list:
         )
         # If the name does not exist, print it
         if not exists_in_lineage:
-            print(f"{name} does not exist in any 'lineage' columns.")
+            warnings.warn(f"{name} does not exist in any 'lineage' columns. Skipping.")
         else:
             valid.append(name)
     if not valid:
         raise ValueError("No valid cancer types found. Please check the provided cancer types.")
-    print(f"Valid cancer types: {valid}")
+    if verbose > 0:
+        print(f"Valid cancer types: {valid}")
     return valid
 
-def _cancer_specific_depmap(df: pd.DataFrame, cancer_type: list) -> pd.DataFrame:
+def _cancer_specific_depmap(df: pd.DataFrame, cancer_type: list, verbose:int = 0) -> pd.DataFrame:
     """
     Filter the given DataFrame for specific cancer types.
 
@@ -1086,7 +1085,7 @@ def _cancer_specific_depmap(df: pd.DataFrame, cancer_type: list) -> pd.DataFrame
         pd.DataFrame: The filtered DataFrame without the unneeded columns.
     """
     # Filter for cancer types
-    cancer_type = _check_cancer_type(df, cancer_type)
+    cancer_type = _check_cancer_type(df, cancer_type, verbose = verbose)
     names = '|'.join(cancer_type)
     depmap_filt = df[
         df['lineage_1'].str.contains(names) |
@@ -1175,7 +1174,7 @@ def _plot_depmap_distributions(query_avg_score:list, control_avg_score:list, p_v
     plt.close()
     return image
 
-def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'depmap', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_query_color:str = 'red', plot_background_color:str = 'gray', savepath:str = False) -> (float, Image): # type: ignore
+def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'depmap', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, plot_query_color:str = 'red', plot_background_color:str = 'gray', savepath:str = False, verbose:int = 0) -> (float, Image): # type: ignore
     """
     Performs enrichment analysis using DepMap scores for a given query gene list and cancer type.
 
@@ -1195,10 +1194,16 @@ def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'dep
     # Load depmap scores
     depmap_df, _ = _load_depmap()
     # Clean and filter depmap_df for cancer type
-    depmap_filt, depmap_total_genes = _cancer_specific_depmap(depmap_df, cancer_type)
+    depmap_filt, depmap_total_genes = _cancer_specific_depmap(depmap_df, cancer_type, verbose = verbose)
 
     # Subset for genes of interest
     _, query_avg_score, query_genes_clean = _gene_specific_depmap(depmap_filt, query)
+    # Save scores
+    query_df = pd.DataFrame({
+        'Genes': query_genes_clean,
+        'DepMap Score' : query_avg_score
+    })
+    query_df = query_df.set_index('Genes')
 
     # Get control or background genes
     if custom_background == 'depmap':
@@ -1207,7 +1212,7 @@ def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'dep
         _, control_avg_score, control_genes_clean = _gene_specific_depmap(depmap_filt, background_genes)
         total_control = depmap_total_genes
     else:
-        background_dict, background_name = _define_background_list(custom_background, just_genes = True)
+        background_dict, background_name = _define_background_list(custom_background, just_genes = True, verbose = verbose)
         control_genes = background_dict[background_name]
         _, control_avg_score, control_genes_clean = _gene_specific_depmap(depmap_filt, control_genes)
         total_control = len(control_genes)
@@ -1231,30 +1236,17 @@ def depmap_enrichment(query:list, cancer_type:list, custom_background:Any = 'dep
             f.write(f'Mann-Whitney U p-value: {p_val:.6e}')
 
         # Save scores
-        score_col_name = f'Avg_{",".join(cancer_type)}_Score'
-        query_df = pd.DataFrame({
-            'Genes': query_genes_clean,
-            score_col_name : query_avg_score
-        })
-        query_df.sort_values(
-            by=score_col_name, ascending = True
-        ).to_csv(
-            os.path.join(new_savepath, 'Query_Avg_Score.txt'), sep = '\t', header = False, index = False
-        )
-
+        query_df.sort_values(by='DepMap Score', ascending = True).to_csv(os.path.join(new_savepath, 'Query_Avg_Score.txt'), sep = '\t', header = True, index = True)
+        # Control dataframe
         control_df = pd.DataFrame({
             'Genes': control_genes_clean,
-            score_col_name : control_avg_score
+            'DepMap Score' : control_avg_score
         })
-        control_df.sort_values(
-            by = score_col_name, ascending = True
-        ).to_csv(
-            os.path.join(new_savepath, 'Control_Avg_Score.txt'), sep = '\t', header = False, index = False
-        )
+        control_df.sort_values(by = 'DepMap Score', ascending = True).to_csv(os.path.join(new_savepath, 'Control_Avg_Score.txt'), sep = '\t', header = True, index = False)
         # Save plot
         plot.save(os.path.join(new_savepath, 'DepMap_Enrichment.png'))
 
-    return p_val, plot
+    return query_df, p_val, plot
 #endregion
 
 
@@ -1418,9 +1410,9 @@ def _get_dgidb_data(query:list, min_interaction_citations:int, approved: bool) -
         df = df[df['num_pmids'] >= min_interaction_citations]
         df = df[df['isApproved'] == approved]
         df = df.sort_values(by = ['num_pmids'], ascending = False)
+        df = df.set_index('gene')
     else:
-        print("Query failed to run by returning code of {}.".format(response.status_code))
-
+        raise ValueError("Query failed to run by returning code of {}.".format(response.status_code))
     return df
 
 def _load_open_targets_drugs() -> pd.DataFrame:
@@ -1439,7 +1431,7 @@ def _load_open_targets_drugs() -> pd.DataFrame:
             ot_drug_df[col] = ot_drug_df[col].apply(lambda x: eval(x.decode("utf-8")) if pd.notnull(x) and isinstance(x, bytes) else x)
     return ot_drug_df
 
-def _get_open_targets_drugs(query:list, approved: bool) -> pd.DataFrame:
+def _get_open_targets_drugs(query:list, approved: bool, verbose:int = 0) -> pd.DataFrame:
     """
     Retrieves drugs from Open Targets database that target the specified genes.
 
@@ -1457,7 +1449,8 @@ def _get_open_targets_drugs(query:list, approved: bool) -> pd.DataFrame:
     # Convert genes to Ensembl ID
     pd.options.mode.chained_assignment = None
     ensemble_ids = genes_to_ensembl[genes_to_ensembl['Gene name'].isin(query)]
-    print(f"OpenTargets - {len(ensemble_ids['Gene name'].unique())}/{len(query)} genes found in Ensembl mapping.")
+    if verbose > 0:
+        print(f"OpenTargets - {len(ensemble_ids['Gene name'].unique())}/{len(query)} genes found in Ensembl mapping.")
 
     # Find drugs which target at least one gene
     filtered_targets = drug_targets[drug_targets['linkedTargets.rows'].apply(lambda x: any(gene in ensemble_ids['Gene stable ID'].tolist() for gene in x))]
@@ -1483,11 +1476,15 @@ def _get_open_targets_drugs(query:list, approved: bool) -> pd.DataFrame:
     # Filter dataframe
     filtered_targets = filtered_targets[filtered_targets['isApproved'] == approved]
 
+    # Clean column names
+    filtered_targets = filtered_targets.rename(columns = {'name':'drug'})
+    filtered_targets = filtered_targets.set_index('overlapping_genes')
+
     pd.options.mode.chained_assignment = 'warn'
 
     return filtered_targets
 
-def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgidb_min_citations:int = 1, approved:bool = True, savepath:Any = False) -> dict:
+def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgidb_min_citations:int = 1, approved:bool = True, savepath:Any = False, verbose: int = 0) -> dict:
     """
     Retrieves drug-gene interactions based on the given query.
 
@@ -1514,13 +1511,15 @@ def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgid
 
     # Get drug-gene interactions
     if 'OpenTargets' in drug_source:
-        ot_drugs_df = _get_open_targets_drugs(query, approved)
-        print("OpenTargets - {}/{} genes with interacting drugs. {} unique drugs found with {} approval".format(len(ot_drugs_df.overlapping_genes.unique()), len(query), len(ot_drugs_df.name.unique()), approved))
+        ot_drugs_df = _get_open_targets_drugs(query, approved, verbose = verbose)
+        if verbose > 0:
+            print("OpenTargets - {}/{} genes with interacting drugs. {} unique drugs found with {} approval".format(len(ot_drugs_df.index.unique()), len(query), len(ot_drugs_df.drug.unique()), approved))
         method_data['OpenTargets'] = ot_drugs_df
 
     if 'DGIdb' in drug_source:
         dgi_db = _get_dgidb_data(query, dgidb_min_citations, approved)
-        print("DGIdb - {}/{} genes with interacting drugs. {} unique drugs found with {} approval".format(len(dgi_db.gene.unique()), len(query), len(dgi_db.drug.unique()), approved))
+        if verbose > 0:
+            print("DGIdb - {}/{} genes with interacting drugs. {} unique drugs found with {} approval".format(len(dgi_db.index.unique()), len(query), len(dgi_db.drug.unique()), approved))
         method_data['DGIdb'] = dgi_db
 
     if savepath:
@@ -1529,7 +1528,7 @@ def drug_gene_interactions(query: list, drug_source:list = ['OpenTargets'], dgid
         os.makedirs(new_savepath, exist_ok=True)
         # Save files
         for key, value in method_data.items():
-            value.to_csv(new_savepath + f'{key}_DrugGeneInteractions.csv', index = False)
+            value.to_csv(new_savepath + f'{key}_DrugGeneInteractions.csv', index = True)
 
     return method_data
 
