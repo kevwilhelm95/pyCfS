@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.0 <br>
+Version 0.0.15.1 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -381,6 +381,7 @@ Notes: If multiple models are input (e.g. ['RF', 'LR', 'GB']), the three models 
 - `Image`: Distribution of evaluation/test samples with calculated odds ratios
 - `Image`: Evaluation/test sample AUROC curve
 - `pd.DataFrame`: Table showing probability of case/control for evaluation/test samples.
+- `pd.DataFrame`: Table of feature importance scores for each feature.
 
 ### `odds_ratios` under work
 `Parallelized` <br>
@@ -409,7 +410,7 @@ Takes the variants_by_sample output and performs odds ratio calculations based o
 
 
 ### `ea_distributions`
-Takes the odds_ratio output dataframe and tests EA score distribution differences within a gene for two sets of patients, using the Kolmogorov-Smirnov test.
+Takes the odds_ratio output dataframe and tests EA score distribution differences within a gene for two sets of patients, using the Kolmogorov-Smirnov test. !! To maximize usability, run odds_ratios for all allele frequencies and ea scores and use that exact_test_file for ea_distributions
 #### Parameters:
 - `variants_or` (pd.DataFrame): Aggregated variants output from odds_ratios()
 - `genes` (list): List of genes to analyze EA distributions.
