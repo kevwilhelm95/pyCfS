@@ -474,6 +474,7 @@ def string_enrichment(query:list, string_version:str = 'v11.0', edge_confidence:
         savepath = _fix_savepath(savepath)
         new_savepath = os.path.join(savepath, 'STRING_Enrichment/')
         os.makedirs(new_savepath, exist_ok=True)
+        network_df.to_csv(new_savepath + "STRING_Network.csv", index = False)
         network_image.save(new_savepath + "STRING_Network.png", bbox_inches = 'tight', pad_inches = 0.5)
         enrichment_df.to_csv(new_savepath + "STRING_Enrichment.csv", index = False)
         functional_enrichment_df.to_csv(new_savepath + "STRING_Functional_Enrichment.csv", index = False)
@@ -2291,6 +2292,8 @@ def _pull_gwas_catalog(mondo_id:str, p_upper:float, verbose: int = 0) -> pd.Data
     if response.status_code == 200:
         content_file = io.BytesIO(response.content)
         df = pd.read_csv(content_file, sep = '\t')
+        if df.empty:
+            raise ValueError(f"Data pull for {mondo_id} returned no values, please download and add the path to the table using 'gwas_summary_path'.")
         df = df[df.pValue <= p_upper]
         df_temp = df['locations'].str.split(":", expand = True)
         df['CHR_ID'] = df_temp[0]
@@ -2525,12 +2528,14 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
         gwas_catalog = pd.read_csv(gwas_summary_path, sep = '\t')
         gwas_catalog = gwas_catalog[gwas_catalog['P-VALUE'] <= gwas_p_thresh]
         gwas_catalog.set_index('STRONGEST SNP-RISK ALLELE', inplace = True)
-        mondo_id = ""
+        mondo_id = gwas_summary_path.split("/")[-1].split(" ")[1]
     # Set parameters for colocalization
     distance_bp = distance_mbp * 1000000
     gene_locations = _load_grch38_background(just_genes=False)
     query = _check_query_against_index(query, gene_locations.index)
-    gwas_catalog = gwas_catalog[['CHR_ID', 'CHR_POS', 'MAPPED_GENE']].drop_duplicates()
+    gwas_catalog = gwas_catalog[['CHR_ID', 'CHR_POS', 'MAPPED_GENE']].drop_duplicates().dropna()
+    gwas_catalog['CHR_POS'] = gwas_catalog['CHR_POS'].astype(int)
+    gwas_catalog['CHR_ID'] = gwas_catalog['CHR_ID'].astype(str)
     # Run colocalization for query
     query_chunks = _chunk_data(query, cores)
     query_gene_dicts = _run_parallel_query(_find_snps_within_range, query_chunks, gwas_catalog.index, gene_locations, gwas_catalog, distance_bp, cores)
