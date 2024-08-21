@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.1 <br>
+Version 0.0.15.2 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -243,6 +243,7 @@ Assess the enrichment for co-mentions with specific keywords in PubMed. Signific
 #### Parameters:
 - `query` (list): List of genes.
 - **Optional**:
+    - `field` (str): Toggle for stringency of associations. Default = 'all'. Options = ['all', 'title/abstract', 'title'].
     - `keyword` (str): Keyword to search co-mentions for. Default search query is '("{gene}") AND ("{keyword"}) AND (("gene") OR ("protein"))'.
     - `custom_terms` (str): A custom search query for PubMed. Function will add and "AND" to the end of the gene and then add your custom term after. For example, the custom_term = '(("adipose") OR ("diabetes")) AND (("gene") OR ("protein"))' would produce a search of '("{gene}") AND (("adipose") OR ("diabetes")) AND (("gene") OR ("protein"))'
     - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
