@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.2 <br>
+Version 0.0.15.3 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -386,12 +386,13 @@ Notes: If multiple models are input (e.g. ['RF', 'LR', 'GB']), the three models 
 
 ### `odds_ratios` under work
 `Parallelized` <br>
-Takes the variants_by_sample output and performs odds ratio calculations based on allelic counts between two sets of patients. We recommend performing variant-based calculations on variants with an allele frequency > 1%, as more rare variants will be underpowered. We recommend performing gene-based and domain-based calculations on variants with allele frequency < 1%, as common variants can confound the signal. 
+Takes the variants_by_sample output and performs odds ratio calculations based on allelic counts between two sets of patients. We recommend performing variant-based calculations on variants with an allele frequency > 1%, as more rare variants will be underpowered. We recommend performing gene-based and domain-based calculations on variants with allele frequency < 1%, as common variants can confound the signal. For a detailed description of how the "method", "model", and "level" arguments affect the odds ratios, please see "resource/odds_ratio_calculations.pdf".
 #### Parameters:
 - `variants_by_sample` (pd.DataFrame): Output from the variants_by_sample function.
 - `samples` (pd.DataFrame): Two-column dataframe for samples to calculate odds ratios on. First column = sample_ids. Second column = CaseControl (1/0).
 - `query` (list): List of genes to analyze
 - **Optional**:
+    - `method` (str): Method for determining counts in contingency table. Options = ['sample', 'allelic']. Default = 'sample'
     - `model` (str): Model to calculate odds ratios. Options = ['dominant', 'recessive']. Dominant model includes both heterozygous and homozygous variants. Recessive model only analyzes homozygous variants. Default = 'dominant'
     - `level` (str): Level of analysis. Options = ['variant', 'gene', 'domain']. Variant analyzes variant-by-variant. Gene analyzes gene-collapsed odds ratios. Domain analyzes protein-domains annotated by Evidence and Conclusion Ontology (ECO). Default = 'variant'.
     - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost".
@@ -413,7 +414,7 @@ Takes the variants_by_sample output and performs odds ratio calculations based o
 ### `ea_distributions`
 Takes the odds_ratio output dataframe and tests EA score distribution differences within a gene for two sets of patients, using the Kolmogorov-Smirnov test. !! To maximize usability, run odds_ratios for all allele frequencies and ea scores and use that exact_test_file for ea_distributions
 #### Parameters:
-- `variants_or` (pd.DataFrame): Aggregated variants output from odds_ratios()
+- `variants_by_sample` (pd.DataFrame): Output from variants_by_sample
 - `genes` (list): List of genes to analyze EA distributions.
 - **Optional**:
     - `min_vars` (int): Minimum number of variants needed to analyze distributions.
