@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.3 <br>
+Version 0.0.15.5 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -63,7 +63,7 @@ Save path should be a parent directory (e.g. /path/to/folder) as the functions w
 Combines multiple lists of genes by counting the number of times a gene mets significance in each method. This function will return a table with genes, the number of times it reaches significance, and where they came from, if list_names is assigned. We suggest prioritizing genes that reach significance in at least 2 methods, where increased stringency can come from reaching significance in more than 2 methods.
 #### Parameters:
 - **Optional**:
-    - `gene_dict` (dict): Dict of gene lists if more than 6. {Name: [gene1, gene2, ...]} format
+    - `gene_dict` (dict): Dict of gene lists (as alternative to below). {Name: [gene1, gene2, ...]} format
     - `genes_1` (list): List of genes.
     - `genes_2` (list): List of genes.
     - `genes_3` (list): Additional list of genes.
@@ -82,14 +82,15 @@ Combines multiple lists of genes by counting the number of times a gene mets sig
 `Parallelized` <br>
 Clusters genes from multiple sources in STRING network. Can be used as a "functional consensus" to prioritize genes across methods or to cluster prioritized genes with gold standards, uncovering functional biology related to known genes. When using, we suggest you threshold the clusters at those with 2 or more genes in a cluster
 #### Parameters:
-- `genes_1` (list): list of genes
 - **Optional**:
+    - `genes_1` (list): list of genes
     - `genes_2` (list): list of genes
     - `genes_3` (list): Additional list of genes.
     - `genes_4` (list): Additional list of genes.
     - `genes_5` (list): Additional list of genes.
     - `source_names` (list): Gene list names.
-    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
+    - `gene_dict` (dict): Dict of gene lists (as alternative to above). {Name: [gene1, gene2, ...]} format
+    - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
     - `custom_background` (str OR list): Background gene set for optimal inflation parameter and pathway enrichment. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
@@ -131,7 +132,7 @@ Assess gene set network connectivity and functional enrichment using the STRING 
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
-    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
+    - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'medium').
     - `species` (int): Species code from STRING (Default = 9606 (human))
     - `plot_fontsize` (int): Default = 14.
@@ -173,7 +174,7 @@ Assess the broad network connectivity between two gene sets in the STRING networ
 - **Optional**:
     - `set_1_name` (str): Name of set 1 for plotting & saving (Default = Set_1)
     - `set_2_name` (str): Name of set 2 for plotting & saving (Default = Set_2)
-    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
+    - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'all').
     - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
@@ -198,7 +199,7 @@ Assess the level of direct connections with reference gene set in the STRING net
     - `set_3` (list): List of genes.
     - `set_4` (list): List of genes.
     - `set_5` (list): List of genes.
-    - `string_version` (str): Version of STRING to use. Choose "v11.0", "v11.5", "v12.0". Default = "v11.0"
+    - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
     - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
     - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
@@ -491,7 +492,7 @@ An evidence-based gene prioritization schema, ranking genes based on levels of e
 #### Parameters:
 - `query` (list): List of query genes
 - **Optional**:
-    - `result_dict` (dict): Dictionary of output files annotated with their experiment. Valid experiments and the required file types include: {'p_value': pd.DataFrame, 'goldstandard_overlap': list, 'gwas_catalog_colocalization': pd.DataFrame, 'interconnectivity': pd.DataFrame, 'functional_clustering': pd.DataFrame, 'functional_clustering_enrichment':dict, 'pubmed_comentions': pd.DataFrame, 'depmap_enrichment': pd.DataFrame, 'risk_prediction': pd.DataFrame, 'odds_ratios': pd.DataFrame, 'mouse_phenotype_enrichment': pd.DataFrame, 'drug_gene_interactions': pd.DataFrame}
+    - `result_dict` (dict): Dictionary of output files annotated with their experiment. Valid experiments and the required file types include: {'p_value': pd.DataFrame, 'consensus': pd.DataFrame, 'goldstandard_overlap': list, 'gwas_catalog_colocalization': pd.DataFrame, 'interconnectivity': pd.DataFrame, 'functional_clustering': pd.DataFrame, 'functional_clustering_enrichment':dict, 'pubmed_comentions': pd.DataFrame, 'depmap_enrichment': pd.DataFrame, 'risk_prediction': pd.DataFrame, 'odds_ratios': pd.DataFrame, 'mouse_phenotype_enrichment': pd.DataFrame, 'drug_gene_interactions': pd.DataFrame}
     - `result_path` (str): Path to parent directory of outputs from previous experiments
     - `result_experiments` (list): List of experiments that should be loaded from the result_path.
     - `score_method` (str): Options include "rank" (default) or "binary". For rank, evidence scores will be ranked based on number of significant findings then normalized to a range of 1 (highest) to 0 (lowest). For binary, each gene will be tested for positive criteria and will be given 1 if so and 0 aif not.

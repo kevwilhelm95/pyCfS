@@ -986,7 +986,7 @@ def _annotated_true_clusters_enrich_sig(true_clusters_enrich_df_dict:dict, pval_
         new_dict[key]['combo'] = pd.concat([value['reactomes'], value['go_bp'], value['go_cc'], value['go_mf'], value['kegg'], value['wiki']], axis = 0)
     return new_dict
 
-def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False, verbose:int = 0) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
+def functional_clustering(genes_1: list = False, genes_2: list = False, genes_3: Any = False, genes_4: Any = False, genes_5: Any = False, source_names: Any = False, gene_dict: Any = False, string_version:str = 'v11.0', evidences:list = ['all'], edge_confidence:str = 'highest', custom_background:Any = 'string', random_iter:int = 100, inflation:Any = None, pathways_min_group_size:int = 5, pathways_max_group_size: int = 100, cores:int = 1, savepath: Any = False, verbose:int = 0) -> (pd.DataFrame, pd.DataFrame, dict): # type: ignore
     """
     Perform functional clustering analysis on a set of genes.
 
@@ -1029,7 +1029,11 @@ def functional_clustering(genes_1: list, genes_2: list = False, genes_3: Any = F
         background_dict, background_name = _define_background_list(custom_background)
         background_genes = background_dict[background_name]
     # true gene sets and set of all input genes
-    gene_sets, source_names = _clean_query([genes_1, genes_2, genes_3, genes_4, genes_5], source_names)
+    if genes_1 != False:
+        gene_sets, source_names = _clean_query([genes_1, genes_2, genes_3, genes_4, genes_5], source_names)
+    else:
+        gene_sets = gene_dict
+        source_names = list(gene_dict.keys())
     gene_sources, input_genes = _get_gene_sources(gene_sets)
     # returns network with connections b/w all input_genes
     true_gene_network = _get_input_gene_network(input_genes, string_net)
