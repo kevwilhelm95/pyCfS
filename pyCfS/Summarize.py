@@ -71,6 +71,11 @@ def _load_results(result_path:str, result_experiments:list, valid_keys_and_types
     if 'p_value' in result_experiments:
         p_value = pd.read_csv(result_path + "BP_gene_results.csv", index_col = 0)
         return_dict['p_value'] = p_value
+    
+    if 'consensus' in result_experiments:
+        consensus = pd.read_csv(result_path + "ConsensusGenes.csv",
+                                index_col = 0)
+        return_dict['consensus'] = consensus
 
     if 'goldstandard_overlap' in result_experiments:
         gs = pd.read_csv(result_path + "GoldStandard_Overlap/GoldStandards.txt", sep = '\t', header = None, names = ['Gene'])
@@ -193,6 +198,31 @@ def _load_results(result_path:str, result_experiments:list, valid_keys_and_types
         return_dict['pubmed_comentions'] = comention_df
 
     return return_dict
+
+def _annotate_consensus(df:pd.DataFrame, consensus:pd.DataFrame, show_indiv_scores:bool = True, score_method:str = 'rank') -> pd.DataFrame:
+    """
+    Annotates a DataFrame with consensus information and calculates prioritization scores.
+
+    Parameters:
+    df (pd.DataFrame): The input DataFrame to be annotated.
+    consensus (pd.DataFrame): A DataFrame containing consensus information.
+    show_indiv_scores (bool): Whether to show individual scores for consensus. Default is True.
+
+    Returns:
+    pd.DataFrame: The annotated DataFrame with added prioritization scores.
+    """
+    out_df = df.copy()
+    consensus = consensus.rename(columns = {'occurrences': 'Consensus Count'})
+    out_df = out_df.merge(consensus, left_index = True, right_index = True, how = 'left')
+    # Add score
+    out_df['InverseRanking'] = out_df['Consensus Count'].rank(ascending = True, method = 'min').astype(int)
+    out_df['Score-Consensus'] = out_df['InverseRanking'] / len(out_df)
+    out_df['Score'] += out_df['Score-Consensus']
+    if show_indiv_scores:
+        out_df = out_df.drop(columns = ['InverseRanking', 'lists'])
+    else:
+        out_df = out_df.drop(columns = ['InverseRanking', 'Score-Consensus', 'lists'])
+    return out_df
 
 def _annotate_p_value(df:pd.DataFrame, p_value_df: pd.DataFrame, p_value_column:str, show_indiv_scores:bool = True) -> pd.DataFrame:
     """
@@ -714,7 +744,7 @@ def prioritize_genes(query: list, result_dict:dict = {}, result_path:str = "", r
     pd.DataFrame: The annotated and ranked DataFrame.
     """
     # Define the valide arguments for inputs
-    valid_keys_and_types = {'p_value': pd.DataFrame, 'goldstandard_overlap': list, 'gwas_catalog_colocalization': pd.DataFrame, 'interconnectivity': pd.DataFrame, 'functional_clustering': pd.DataFrame, 'functional_clustering_enrichment':dict, 'pubmed_comentions': pd.DataFrame, 'depmap_enrichment': pd.DataFrame, 'risk_prediction': pd.DataFrame, 'odds_ratios': pd.DataFrame, 'mouse_phenotype_enrichment': pd.DataFrame, 'drug_gene_interactions': pd.DataFrame}
+    valid_keys_and_types = {'p_value': pd.DataFrame, 'consensus': pd.DataFrame, 'goldstandard_overlap': list, 'gwas_catalog_colocalization': pd.DataFrame, 'interconnectivity': pd.DataFrame, 'functional_clustering': pd.DataFrame, 'functional_clustering_enrichment':dict, 'pubmed_comentions': pd.DataFrame, 'depmap_enrichment': pd.DataFrame, 'risk_prediction': pd.DataFrame, 'odds_ratios': pd.DataFrame, 'mouse_phenotype_enrichment': pd.DataFrame, 'drug_gene_interactions': pd.DataFrame}
 
     # Validate result_dict
     if result_dict != {}:
@@ -731,6 +761,9 @@ def prioritize_genes(query: list, result_dict:dict = {}, result_path:str = "", r
     # Annotate p-values
     if 'p_value' in result_experiments:
         main_df = _annotate_p_value(main_df, result_dict['p_value'], p_value_col, show_indiv_scores = show_indiv_scores)
+    # Annotate consensus
+    if 'consensus' in result_experiments:
+        main_df = _annotate_consensus(main_df, result_dict['consensus'], score_method = score_method, show_indiv_scores = show_indiv_scores)
     # Annotate Down-Sampling
     # Annotate Gold Standards
     if 'goldstandard_overlap' in result_experiments:
