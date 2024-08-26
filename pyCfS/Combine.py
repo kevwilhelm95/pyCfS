@@ -1029,7 +1029,7 @@ def functional_clustering(genes_1: list = False, genes_2: list = False, genes_3:
         background_dict, background_name = _define_background_list(custom_background)
         background_genes = background_dict[background_name]
     # true gene sets and set of all input genes
-    if genes_1 != False:
+    if genes_1:
         gene_sets, source_names = _clean_query([genes_1, genes_2, genes_3, genes_4, genes_5], source_names)
     else:
         gene_sets = gene_dict
@@ -1365,7 +1365,7 @@ def _p_multiply(df: pd.DataFrame) -> pd.DataFrame:
     df['p.multiply'] = sub_df.prod(axis=1)
     return df
 
-def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = False, df_4:Any = False, df_5:Any = False, df_6:Any = False, gene_df:pd.DataFrame = pd.DataFrame(), list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
+def statistical_combination(df_1:pd.DataFrame = pd.DataFrame(), df_2:pd.DataFrame = pd.DataFrame(), df_3:pd.DataFrame = pd.DataFrame(), df_4:pd.DataFrame = pd.DataFrame(), df_5:pd.DataFrame = pd.DataFrame(), df_6:pd.DataFrame = pd.DataFrame(), gene_df:pd.DataFrame = pd.DataFrame(), list_names:Any = False, savepath:Any = False) -> pd.DataFrame:
     """
     Combines statistical data from multiple DataFrames using various statistical methods.
 
@@ -1420,7 +1420,6 @@ def statistical_combination(df_1:pd.DataFrame, df_2:pd.DataFrame, df_3:Any = Fal
         clean_df = _merge_p_inputs(df_dict)
     else:
         clean_df = gene_df.copy()
-    # Calculate CCT, minP
     # Calculate CCT, minP
     df_cols = [x for x in clean_df.columns if "p_" in x]
     results = []
