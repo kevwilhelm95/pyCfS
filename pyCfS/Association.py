@@ -1239,6 +1239,16 @@ def _annotate_domain_region(df: pd.DataFrame) -> pd.DataFrame:
     return final_df
 
 def _transform_vbysample_to_exact_test(variants_by_sample: pd.DataFrame, level:str) -> pd.DataFrame:
+    """
+    Transforms the variants_by_sample DataFrame to perform exact tests based on the specified level.
+    - variants_by_sample (pd.DataFrame): The input DataFrame containing variant information.
+    - level (str): The level at which the exact tests should be performed. Valid options are 'variant', 'domain', or 'gene'.
+    - pd.DataFrame: The transformed DataFrame containing aggregated results based on the specified level.
+    - list: The list of unique values in the specified level column.
+    - str: The name of the column used for aggregation.
+    Raises:
+    - ValueError: If an invalid level is provided.
+    """
     # Remove non-HGVSp (non-coding) variants
     variants_by_sample = variants_by_sample[variants_by_sample['HGVSp'] != '.']
     # Define allele count aggregation functions
@@ -1269,7 +1279,7 @@ def _transform_vbysample_to_exact_test(variants_by_sample: pd.DataFrame, level:s
         int: Maximum value of 'AN_Cohort' for the filtered indices.
         """
         return variants_by_sample.loc[x.index, 'AN_Cohort'][x == 0].max()
-    
+
     # Define your aggregation functions
     aggregation_functions = {
         'Case_All_AC': (
