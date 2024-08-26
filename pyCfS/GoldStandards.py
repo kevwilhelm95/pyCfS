@@ -2307,6 +2307,29 @@ def _pull_gwas_catalog(mondo_id:str, p_upper:float, verbose: int = 0) -> pd.Data
         warnings.warn(f"Status code exited with error: {response.status_code}")
         raise ValueError(f"Cannot download summary statistics for {mondo_id}, please download and add the path to the table.")
 
+def _split_row(row: pd.Series) -> pd.DataFrame:
+    """
+    Splits the values in the given row of a pandas DataFrame into multiple rows.
+
+    Parameters:
+        row (pd.Series): The row to be split.
+
+    Returns:
+        pd.DataFrame: A DataFrame with the split values.
+
+    """
+    snp_alleles = str(row.name).split(',')
+    chr_pos = str(row['CHR_POS']).split(',')
+    genes = str(row['MAPPED_GENE'])
+
+    max_len = len(snp_alleles)
+
+    return pd.DataFrame(index = snp_alleles, data = {
+        'CHR_ID': [row['CHR_ID']] * max_len,
+        'CHR_POS': chr_pos[:max_len] + [np.nan] * (max_len - len(chr_pos)),
+        'MAPPED_GENE': genes
+    })
+
 def _check_query_against_index(query_genes:list, ref_gene_index:list) -> list:
     """
     Checks if query genes are present in a reference gene index and returns a list of matching genes.
@@ -2533,9 +2556,18 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     distance_bp = distance_mbp * 1000000
     gene_locations = _load_grch38_background(just_genes=False)
     query = _check_query_against_index(query, gene_locations.index)
+    # Clean the GWAS catalog result
     gwas_catalog = gwas_catalog[['CHR_ID', 'CHR_POS', 'MAPPED_GENE']].drop_duplicates().dropna()
+    gwas_catalog['needs_split'] = gwas_catalog.index.str.contains(',', na = False)
+    split_rows = gwas_catalog[gwas_catalog['needs_split']].apply(_split_row, axis = 1)
+    split_df = pd.concat(split_rows.tolist())
+    split_df = split_df[split_df['CHR_POS'].str.len() >= 3]
+    gwas_catalog = pd.concat([gwas_catalog[~gwas_catalog['needs_split']], split_df], ignore_index = False)
+    gwas_catalog = gwas_catalog.drop('needs_split', axis = 1).dropna(subset = ['CHR_POS', 'CHR_ID']).drop_duplicates()
     gwas_catalog['CHR_POS'] = gwas_catalog['CHR_POS'].astype(int)
     gwas_catalog['CHR_ID'] = gwas_catalog['CHR_ID'].astype(str)
+    gwas_catalog.to_csv(savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}.csv", index = True)
+    print('test')
     # Run colocalization for query
     query_chunks = _chunk_data(query, cores)
     query_gene_dicts = _run_parallel_query(_find_snps_within_range, query_chunks, gwas_catalog.index, gene_locations, gwas_catalog, distance_bp, cores)
