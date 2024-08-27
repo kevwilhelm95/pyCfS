@@ -204,7 +204,7 @@ def _parse_vep(vcf_fn:str, gene:str, gene_ref:pd.DataFrame, samples:list, ea_par
             row.append(total_an)
             rows.append(row)
     cols = ['ENSP', 'chr','pos','ref','alt', 'HGVSp', 'Consequence', 'EA','gene','sample','zyg','AF', 'AN_Cohort']
-    col_type = {'chr': str, 'pos': str, 'ref': str, 'alt': str, 'sample':int, 'EA':float, 'zyg':int, 'AF':float}
+    col_type = {'chr': str, 'pos': str, 'ref': str, 'alt': str, 'sample':str, 'EA':float, 'zyg':int, 'AF':float}
     df = pd.DataFrame(rows, columns = cols)
     df = df.astype(col_type)
     return df
