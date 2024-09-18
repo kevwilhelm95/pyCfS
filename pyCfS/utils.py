@@ -317,7 +317,7 @@ def _merge_random_counts(random_counts_iterations:list) -> dict:
                 merged_counts[k] = [v]
     return merged_counts
 
-def _filter_variants(variants: pd.DataFrame, gene: str, max_af:float, min_af:float, ea_lower:float, ea_upper:float) -> (pd.DataFrame, pd.DataFrame): # type: ignore
+def _filter_variants(variants: pd.DataFrame, gene: str, max_af:float, min_af:float, ea_lower:float, ea_upper:float, consequence: str) -> (pd.DataFrame, pd.DataFrame): # type: ignore
     """
     Filters variants based on specified criteria.
 
@@ -342,7 +342,8 @@ def _filter_variants(variants: pd.DataFrame, gene: str, max_af:float, min_af:flo
         (variants['EA'] >= ea_lower) &
         (variants['EA'] <= ea_upper) &
         (variants['CaseControl'] == 1) &
-        (variants['HGVSp'] != '.')
+        (variants['HGVSp'] != '.') &
+        (variants['Consequence'].str.contains(consequence, na=False))
     ].reset_index(drop = True)
     cont_vars = variants[
         (variants['gene'] == gene) &
@@ -351,7 +352,8 @@ def _filter_variants(variants: pd.DataFrame, gene: str, max_af:float, min_af:flo
         (variants['EA'] >= ea_lower) &
         (variants['EA'] <= ea_upper) &
         (variants['CaseControl'] == 0) &
-        (variants['HGVSp'] != '.')
+        (variants['HGVSp'] != '.') &
+        (variants['Consequence'].str.contains(consequence, na=False))
     ].reset_index(drop = True)
     return case_vars, cont_vars
 

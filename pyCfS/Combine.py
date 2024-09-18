@@ -14,7 +14,9 @@ import upsetplot as up
 from PIL import Image
 import io
 import networkx as nx
+import uuid
 import ast
+import time
 import markov_clustering as mc
 import warnings
 from statsmodels.stats.multitest import multipletests
@@ -631,10 +633,11 @@ def _create_random_degree_matched_set(gene_sets:dict, background_genes:list, str
         unique_mapped_genes_degree_dict = dict(zip(unique_mapped_genes_degree_df.index.tolist(), unique_mapped_genes_degree_df['degree'].tolist()))
         # add filter step to check source of true gene set
         set_num = int(named_sources.index(k))
+        random_seed = int(time.time()) + (uuid.uuid4().int & (1<<32)-1)
         random_genes = []
         if str(named_sources[set_num]) == 'Reactomes':
             reactome_genes = _load_reactome_genes(min_group_size, max_group_size)
-            rng = np.random.default_rng(seed = set_num * 42)
+            rng = np.random.default_rng(seed = random_seed)
             for k1, v1 in unique_mapped_genes_degree_dict.items():
                 degree_df_matched = degree_df[degree_df['degree_rounded']==k1]
                 degree_df_matched = degree_df_matched[degree_df_matched.index.isin(reactome_genes)]
@@ -642,7 +645,7 @@ def _create_random_degree_matched_set(gene_sets:dict, background_genes:list, str
                 x = rng.choice(degree_matched_genes, v1, replace=False).tolist()
                 random_genes.extend(x)
         else:
-            rng = np.random.default_rng(seed = set_num * 42)
+            rng = np.random.default_rng(seed = random_seed)
             for k1, v1 in unique_mapped_genes_degree_dict.items():
                 degree_df_matched = degree_df[degree_df['degree_rounded']==k1]
                 degree_matched_genes = degree_df_matched.index.tolist()
