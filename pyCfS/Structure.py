@@ -54,12 +54,12 @@ def _fishers_exact_test(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, case_p
     Returns:
         tuple: A tuple containing the odds ratio, lower confidence interval, upper confidence interval, and p-value.
     """
-    # Create contingency table
-    obs_case_alleles = case_vars['zyg'].sum()
-    obs_cont_alleles = cont_vars['zyg'].sum()
-    exp_case_alleles = case_pop - obs_case_alleles
-    exp_cont_alleles = cont_pop - obs_cont_alleles
-    contingency_table = [[obs_case_alleles, obs_cont_alleles], [exp_case_alleles, exp_cont_alleles]]
+    # Create contingency table based on sample-wise counts
+    obs_case_count = len(case_vars['sample'][case_vars['zyg'] != 0].unique())
+    obs_cont_count = len(cont_vars['sample'][cont_vars['zyg'] != 0].unique())
+    exp_case_count = case_pop - obs_case_count
+    exp_cont_count = cont_pop - obs_cont_count
+    contingency_table = [[obs_case_count, obs_cont_count], [exp_case_count, exp_cont_count]]
     # Perform Fisher's exact test
     oddsratio_data = sm.stats.Table2x2(contingency_table)
     odds_ratio = oddsratio_data.oddsratio
@@ -132,7 +132,7 @@ def _check_pdb_id(protein_id:str) -> str:
         protein_id = pdb_sub['prot_id'].values[0]
     return protein_id
 
-def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int, verbose:int = 0) -> PILImage.Image:
+def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, gene: str, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int, verbose:int = 0) -> PILImage.Image:
     """
     Generate a lollipop plot using R's EvoTrace package.
 
@@ -182,10 +182,12 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
             ran = True
             continue
         except Exception as e:
-            if "missing value where TRUE/FALSE needed" in e:
-                warnings.warn(f'{prot_id} does not match length of input variants')
+            if "missing value where TRUE/FALSE needed" in str(e):
+                print(f'{prot_id} -- {gene} does not match length of input variants')
+            elif "unmatched residues" in str(e):
+                print(f"{prot_id} -- {gene} has mismatching residues: {e}")
             else:
-                warnings.warn(f"Error: {e}")
+                print(f"Error: {e}")
             ran = False
     if ran == False:
         warnings.warn(f"No ENSP IDs match")
@@ -200,7 +202,7 @@ def _r_lollipop_plot2(case_vars: pd.DataFrame, cont_vars: pd.DataFrame, plot_dom
     lollipop_plot_plot = PILImage.open(image_buffer)
     return lollipop_plot_plot
 
-def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int, verbose:int = 0) -> PILImage.Image:
+def _r_lollipop_plot1(input_vars: pd.DataFrame, gene:str, plot_domain:bool, ac_scale:str, ea_color:str, domain_min_dist:int, verbose:int = 0) -> PILImage.Image:
     """
     Generate a lollipop plot using the EvoTrace package.
 
@@ -250,10 +252,12 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
             ran = True
             continue
         except Exception as e:
-            if "missing value where TRUE/FALSE needed" in e:
-                warnings.warn(f'{prot_id} does not match length of input variants')
+            if "missing value where TRUE/FALSE needed" in str(e):
+                print(f'{prot_id} -- {gene} does not match length of input variants')
+            elif "unmatched residues" in str(e):
+                print(f"{prot_id} -- {gene} has mismatching residues: {e}")
             else:
-                warnings.warn(f"Error: {e}")
+                print(f"Error: {e}")
             ran = False
     if ran == False:
         warnings.warn(f"No ENSP IDs match")
@@ -268,7 +272,7 @@ def _r_lollipop_plot1(input_vars: pd.DataFrame, plot_domain:bool, ac_scale:str, 
     lollipop_plot_plot = PILImage.open(image_buffer)
     return lollipop_plot_plot
 
-def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_pop:int=0, cont_pop:int=0, max_af:float = 1.0, min_af:float = 0.0, ea_lower:float = 0.0, ea_upper:float = 100.0, show_domains:bool = True, ac_scale:str = 'linear', ea_color:str = 'prismatic', domain_min_dist:int = 20, savepath:str = False, verbose: int = 0) -> (Image, float, float, float, float): # type: ignore
+def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_pop:int=0, cont_pop:int=0, max_af:float = 1.0, min_af:float = 0.0, ea_lower:float = 0.0, ea_upper:float = 100.0, consequence: str = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost', show_domains:bool = True, ac_scale:str = 'linear', ea_color:str = 'prismatic', domain_min_dist:int = 20, savepath:str = False, verbose: int = 0) -> (Image, float, float, float, float): # type: ignore
     """
     Generate a lollipop plot for a given gene based on variant data.
 
@@ -297,11 +301,11 @@ def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_po
     if (case_pop == 0) & (cont_pop == 0):
         case_pop = variants['sample'][variants['CaseControl'] == 1].nunique()
         cont_pop = variants['sample'][variants['CaseControl'] == 0].nunique()
-    if verbose > 1:
+    if verbose >= 1:
         print(f"Number of cases in variant file: {case_pop}")
         print(f"Number of controls in variant file: {cont_pop}")
     # Filter dataframe for gene and split by case and control
-    case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper)
+    case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper, consequence)
     if case_vars.empty:
         warnings.warn(f"No variants found for {gene} in case group. Using controls only")
         group = 'control'
@@ -319,13 +323,13 @@ def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_po
         # Calculate fisher's exact test
         odds_ratio, lower_ci, upper_ci, pval = _fishers_exact_test(case_vars, cont_vars, case_pop, cont_pop)
         # Create the lollipop plot
-        plot = _r_lollipop_plot2(case_vars_collapsed, cont_vars_collapsed, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist, verbose = verbose)
+        plot = _r_lollipop_plot2(case_vars_collapsed, cont_vars_collapsed, gene, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist, verbose = verbose)
 
     # Run lollipop_plot1 for single group
     elif group == 'case' or group == 'control':
         input_vars = case_vars_collapsed if group == 'case' else cont_vars_collapsed
         # Create lollipop plot
-        plot = _r_lollipop_plot1(input_vars, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist, verbose = verbose)
+        plot = _r_lollipop_plot1(input_vars, gene, plot_domain = show_domains, ac_scale = ac_scale, ea_color = ea_color, domain_min_dist = domain_min_dist, verbose = verbose)
         pval, odds_ratio, lower_ci, upper_ci = None, None, None, None
 
     # Save data
@@ -684,7 +688,7 @@ def _plot_scw_z(output_df:pd.DataFrame, scw_plddt_cutoff: int) -> PILImage.Image
     plt.close()
     return image
 
-def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, min_af:float = 0.0, ea_lower:int = 0, ea_upper:int = 100, scw_chain:str = 'A', scw_plddt_cutoff: int = 50, scw_min_dist_cutoff:int = 4, scw_max_dist_cutoff:int = 12, cores:int = 1, savepath: str=False) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, PILImage, PILImage, PILImage): # type: ignore
+def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, min_af:float = 0.0, ea_lower:int = 0, ea_upper:int = 100, consequence: str = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost', scw_chain:str = 'A', scw_plddt_cutoff: int = 50, scw_min_dist_cutoff:int = 4, scw_max_dist_cutoff:int = 12, cores:int = 1, savepath: str=False) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, PILImage, PILImage, PILImage): # type: ignore
     """
     Generate AlphaFold protein structures for the given variants and save them to a specified path.
 
@@ -701,7 +705,7 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
         None
     """
     # Separate into case and control variants
-    case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper)
+    case_vars, cont_vars = _filter_variants(variants, gene, max_af, min_af, ea_lower, ea_upper, consequence)
     if case_vars.empty:
         warnings.warn(f"No variants found for {gene} in case group. Using controls only")
         cont_vars_collapsed = _clean_variant_formats(cont_vars)

@@ -122,8 +122,15 @@ def _plot_overlap_venn(query_len:int, goldstandard_len:int, overlap:list, pval:f
             continue
         text.set_fontsize(fontsize)
     if show_genes_pval:
-        plt.text(0, -0.7,
-                str("p = " + f"{pval:.2e}"),
+        if pval < 0.01:
+            plt.text(0, -0.7,
+                    str("p = " + f"{pval:.2e}"),
+                    horizontalalignment='center',
+                    verticalalignment='top',
+                    fontsize=fontsize-2)
+        else:
+            plt.text(0, -0.7,
+                str("p = " + f"{pval:.2f}"),
                 horizontalalignment='center',
                 verticalalignment='top',
                 fontsize=fontsize-2)
@@ -2567,7 +2574,6 @@ def gwas_catalog_colocalization(query:list, mondo_id:str = False, gwas_summary_p
     gwas_catalog = gwas_catalog.drop('needs_split', axis = 1).dropna(subset = ['CHR_POS', 'CHR_ID']).drop_duplicates()
     gwas_catalog['CHR_POS'] = gwas_catalog['CHR_POS'].astype(int)
     gwas_catalog['CHR_ID'] = gwas_catalog['CHR_ID'].astype(str)
-    gwas_catalog.to_csv(savepath + f"GWAS_Colocalization_{mondo_id}_p-{gwas_p_thresh}.csv", index = True)
     # Run colocalization for query
     query_chunks = _chunk_data(query, cores)
     query_gene_dicts = _run_parallel_query(_find_snps_within_range, query_chunks, gwas_catalog.index, gene_locations, gwas_catalog, distance_bp, cores)

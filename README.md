@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.9 <br>
+Version 0.0.15.10 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -434,7 +434,7 @@ Takes the odds_ratio output dataframe and tests EA score distribution difference
 
 ## pyCFS.Structure
 ### `lollipop_plot()`
-Generates a lollipop plot given case and control variants and tests odds ratios (for 'both' only) using a Fisher's exact test.
+Generates a lollipop plot given case and control variants and tests odds ratios (for 'both' only) using a Fisher's exact test calculated using sample-based model (see "resource/odds_ratio_calculations.pdf").
 #### Parameters:
 - `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to plot ("PDGFRB")
@@ -445,6 +445,7 @@ Generates a lollipop plot given case and control variants and tests odds ratios 
     - `max_af` (float): Max allele frequency to display in the plot. Default = 1.0
     - `ea_lower` (float): Minimum EA score to include. Default = 0
     - `ea_upper` (float): Maximum EA score to include. Default = 100
+    - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost".
     - `show_domains` (bool): Toggle plotting of domains in structure. Defaut = True
     - `ac_scale` (str): Change the scale of the y-axis. Default = 'linear'. Options = ['linear', 'log']
     - `ea_color` (str): Color scale for Lollipop and Linear structure. Default = 'prismatic'. Options = ['prismatic', 'gray_scale', 'EA_bin', 'black']
@@ -474,6 +475,7 @@ Generates a Pymol script to visualize variant location in 3D protein structure (
     - `min_af` (float): Minimum allele frequency to include. Default = 0
     - `ea_upper` (int): Maximum EA score to include. Default = 100
     - `ea_lower` (int): Minimum EA score to include. Default = 0
+    - `consequence` (str): Regex pattern to filter variants for their consequences. Options = ['stop_gained', 'frameshift_variant', 'stop_lost', 'missense_variant', 'splice_region_variant', 'splice_donor_variant', 'splice_acceptor_variant', 'start_lost'] Default = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost".
     - `cores` (int): Number of cores to include. SCW is memory intensive and may run out of memory locally if more than a few cores.
     - `savepath` (str): Path to save. If not provided, PyMol model is not created, but SCW will run
 #### Returns: 
