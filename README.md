@@ -328,6 +328,7 @@ Assess enrichment for cancer-dependent genes. Significance is determined by a Ma
     - `savepath` (str) : File path
     - `verbose` (int): Verbosity argument. Default = no verbose (0).
 #### Returns
+- `pd.DataFrame` : Dataframe of query genes and their cancer dependency scores
 - `float` : P-value of Mann Whitney U test
 - `Image` : Histogram of Chronos DepMap scores for query and background genes
 
