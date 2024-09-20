@@ -224,6 +224,7 @@ def variants_by_sample(query:list, vcf_path:str, samples:pd.DataFrame, transcrip
         pd.DataFrame: DataFrame containing the design matrix of variants for the specified genes and samples.
     """
     # Get the sample IDs you are interested in
+    samples[[samples.columns[0]]] = samples[[samples.columns[0]]].astype(str)
     cases = samples.loc[samples.iloc[:,1] == 1]
     controls = samples.loc[samples.iloc[:,1] == 0]
     case_ids = cases.iloc[:, 0].astype(str).tolist()
@@ -805,10 +806,12 @@ def _save_feature_weights(estimator: Any, model: str, feature_matrix: pd.DataFra
     else:
         feature_weights = None
         return feature_weights
-
+    
     if feature_weights:
         feature_weights_df = pd.DataFrame.from_dict(feature_weights, orient='index', columns=['Feature Weight'])
-        feature_weights_df = feature_weights_df.sort_values(by='Feature Weight', ascending=False)
+        feature_weights_df['abs(Feature Weight)'] = feature_weights_df['Feature Weight'].abs()
+        feature_weights_df = feature_weights_df.sort_values(by='abs(Feature Weight)', ascending=False)
+        feature_weights_df.drop(columns = 'abs(Feature Weight)', inplace=True)
         return feature_weights_df
 
 def _plot_auroc(fpr: pd.Series, tpr: pd.Series, roc_auc:float) -> Image:
@@ -1006,7 +1009,7 @@ def risk_prediction(feature_matrix: pd.DataFrame, train_samples: pd.DataFrame, t
     # Cross-Validation
     cv_score = cross_val_score(final_estimator, x_train, y_train, cv=10, scoring='roc_auc')
     # Get Feature Weights
-    feature_weights = _save_feature_weights(final_estimator, models, x_train, verbose = verbose)
+    feature_weights = _save_feature_weights(final_estimator, best_model, x_train, verbose = verbose)
 
     ## Test the final model
     x_test = x_test.loc[:,selected_features]
