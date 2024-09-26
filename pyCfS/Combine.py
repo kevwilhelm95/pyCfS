@@ -1412,14 +1412,19 @@ def statistical_combination(df_1:pd.DataFrame = pd.DataFrame(), df_2:pd.DataFram
     >>> df_combined = statistical_combination(df_1, df_2, df_3=df_3, savepath="path/to/save/")
     """
     # Prepare input
+    if not isinstance(gene_df, pd.DataFrame):
+        raise ValueError("Please provide a DataFrame for gene_df with the format of gene name as index, and columns as p-values formatted as 'p_{method 1}'")
     if gene_df.empty:
         df_dict = {}
-        df_list = [x for x in [df_1, df_2, df_3, df_4, df_5, df_6] if x is not False]
+        df_list = [x for x in [df_1, df_2, df_3, df_4, df_5, df_6] if not x.empty]
         if list_names:
             for j in range(len(list_names)):
                 df_dict[list_names[j]] = df_list[j]
         else:
-            df_dict = {1:df_1, 2:df_2, 3:df_3, 4:df_4, 5:df_5, 6:df_6}
+            for i in range(len(df_list)):
+
+                df_dict[i+1] = df_list[i]
+            #df_dict = {1:df_1, 2:df_2, 3:df_3, 4:df_4, 5:df_5, 6:df_6}
         clean_df = _merge_p_inputs(df_dict)
     else:
         clean_df = gene_df.copy()
