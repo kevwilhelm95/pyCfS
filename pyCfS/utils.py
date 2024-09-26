@@ -200,9 +200,7 @@ def _define_background_list(background_:Any, just_genes: bool = True, verbose:in
     """
     background_name = background_
     if isinstance(background_, str):
-        if background_ not in ['reactome', 'ensembl']:
-            raise ValueError("Background must be either 'reactome' or 'ensembl' or list of genes")
-        elif background_ == 'reactome':
+        if background_ == 'reactome':
             reactomes_bkgd = _load_reactome()
             reactomes_genes = [x[1:] for x in reactomes_bkgd]
             reactomes_genes = [item for sublist in reactomes_genes for item in sublist]
@@ -212,12 +210,28 @@ def _define_background_list(background_:Any, just_genes: bool = True, verbose:in
         elif background_ == 'ensembl':
             ensembl_bkgd = _load_grch38_background(just_genes)
             background_dict = {'ensembl':ensembl_bkgd}
+        elif background_ == 'string_v12.0':
+            _, string_v12_genes = _load_clean_string_network('v12.0', ['all'], 'low')
+            background_dict = {'string_v12.0':string_v12_genes}
+        elif background_ == 'string_v11.5':
+            _, string_v11_5_genes = _load_clean_string_network('v11.5', ['all'], 'low')
+            background_dict = {'string_v11.5':string_v11_5_genes}
+        elif background_ == 'string_v11.0':
+            _, string_v11_0_genes = _load_clean_string_network('v11.0', ['all'], 'low')
+            background_dict = {'string_v11.0':string_v11_0_genes}
+        elif background_ == 'string_v10.0':
+            _, string_v10_0_genes = _load_clean_string_network('v10.0', ['all'], 'low')
+            background_dict = {'string_v10.0':string_v10_0_genes}
+        else:
+            raise ValueError("Background must be either 'reactome', 'ensembl', 'string_v12.0', 'string_v11.5', 'string_v11.0', or 'string_v10.0'")
     # Custom background
     elif isinstance(background_, list):
         if verbose > 0:
             print(f"Custom background: {len(background_)} genes")
         background_dict = {'custom':background_}
         background_name = 'custom'
+    else:
+        raise ValueError("Background must be either 'reactome', 'ensembl' or list of genes")
 
     return background_dict, background_name
 
@@ -551,7 +565,7 @@ def _get_edge_weight(edge_confidence:str) -> float:
         weight needs to be assigned for computational purposes.
     """
     if edge_confidence == 'low':
-        weight = 0.2
+        weight = 0.15
     elif edge_confidence == 'high':
         weight = 0.7
     elif edge_confidence == 'highest':

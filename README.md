@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.11 <br>
+Version 0.0.15.12 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -24,8 +24,9 @@ pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
 See "example.ipynb" for help
 
 #### Notes
-Parallelized functions require the user to run function under blocking guard (i.e. if `__name__ == "__main__"`:) <br>
-Save path should be a parent directory (e.g. /path/to/folder) as the functions will create experiment-specific folders automatically (e.g. /path/to/folder/experiment)
+- Parallelized functions require the user to run function under blocking guard (i.e. if `__name__ == "__main__"`:) <br>
+- Save path should be a parent directory (e.g. /path/to/folder) as the functions will create experiment-specific folders automatically (e.g. /path/to/folder/experiment) <br>
+- STRING-defined custom_background (e.g. "string_v12.0") will use all genes with interactions above low threshold (> 0.15)
 
 #### Available Methods
 - `pyCFS.Combine`
@@ -110,14 +111,14 @@ Clusters genes from multiple sources in STRING network. Can be used as a "functi
 ### `statistical_combination()`
 Statistical p-value combination methods, including Cauchy, MCM, CMC, Minimum p, and P multiplication. We suggest using a p-value threshold of 1e-4 for genes scored by all methods, and a p-value threshold of 5e-8 for those scored by fewer methods.
 #### Parameters
-- `df_1` (pd.DataFrame): Two-column df with genes (col1) and p-value (col2). No specific header format.
-- `df_2` (pd.DataFrame): Two-column df with genes (col1) and p-value (col2).
 - **Optional**:
+    - `df_1` (pd.DataFrame): Two-column df with genes (col1) and p-value (col2). No specific header format. Do not fill NAs with 1
+    - `df_2` (pd.DataFrame): Two-column df with genes (col1) and p-value (col2).
     - `df_3` (pd.DataFrame): Additional two-column df.
     - `df_4` (pd.DataFrame): Additional two-column df.
     - `df_5` (pd.DataFrame): Additional two-column df.
     - `df_6` (pd.DataFrame): Additional two-column df.
-    - `gene_df` (pd.DataFrame): Dataframe of p-values if more than 6. Column 1 = 'gene' (gene names). Column 2-x = 'p_{name}' (p-values).
+    - `gene_df` (pd.DataFrame): Dataframe of p-values if more than 6. Index = gene names. Column 1-x = 'p_{list name}' (p-values). Do not fill NAs with 1s.
     - `savepath` (str): File path. No files saved if not provided.
 #### Returns:
 - `pd.DataFrame` : Dataframe containing genes, their original p-values, and p-value combinations for Cauchy, MinP, CMC, MCM, and multiplied p-values.
@@ -133,7 +134,7 @@ Assess gene set network connectivity and functional enrichment using the STRING 
 - `query` (list): List of genes
 - **Optional**:
     - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
-    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'medium').
+    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.15), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'medium').
     - `species` (int): Species code from STRING (Default = 9606 (human))
     - `plot_fontsize` (int): Default = 14.
     - `plot_fontface` (str): Default = Avenir.
@@ -152,7 +153,7 @@ Assess the overlap with a reference gene set, tested using a hypergeometric test
 - `query` (list): List of query genes
 - `goldstandard` (list): List of gold standard genes
 - **Optional**:
-    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'ensembl').
     - `plot_query_color` (str): Color of query venn diagram (Default = red).
     - `plot_goldstandard_color` (str): Color of goldstandard venn diagram (Default = gray)
     - `plot_show_gene_pval` (bool) : Default = True. Toggle showing the overlapping gene names and p-value on plot image
@@ -176,8 +177,8 @@ Assess the broad network connectivity between two gene sets in the STRING networ
     - `set_2_name` (str): Name of set 2 for plotting & saving (Default = Set_2)
     - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
-    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'all').
-    - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
+    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.15), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'all').
+    - `custom_background` (str OR list): Background gene set. Options include 'string' (matching above version), 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'string').
     - `n_iter` (int): # of randomizations to perform (Default = 100).
     - `cores` (int): # of cores for parallelization (Default = 1).
     - `savepath` (str): Path for saving.
@@ -201,8 +202,8 @@ Assess the level of direct connections with reference gene set in the STRING net
     - `set_5` (list): List of genes.
     - `string_version` (str): Version of STRING to use. Choose "v10.0", "v11.0", "v11.5", "v12.0". Default = "v11.0"
     - `evidences` (list): Evidences to compute edge weight. Options include ['neighborhood', 'fusion', 'coocurence', 'coexpression', 'experimental', 'database', 'textmining'] (Default = ['all']).
-    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.2), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
-    - `custom_background` (str OR list): Background gene set. Options include 'string', 'ensembl', 'reactome' or user defined list (Default = 'string').
+    - `edge_confidence` (str): Minimum edge weight for network. Options include 'all' (weight > 0), 'low' (weight > 0.15), 'medium' (weight > 0.4), 'high' (weight > 0.7), 'highest' (weight > 0.9). (Default = 'highest').
+    - `custom_background` (str OR list): Background gene set. Options include 'string' (matching above string version),'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'string').
     - `num_iterations` (int): # of iterations for background connections (Default = 250). 
     - `cores` (int): For parallelization (Default = 1).
     - `plot_fontface` (str): (Default = Avenir).
@@ -229,7 +230,7 @@ Assess the enrichment for co-localization within X Mbp of genome-wide significan
     - `gwas_summary_path` (str): Path to GWAS Catalog downloaded summary statistics. If used, API is not called.
     - `gwas_p_thresh` (float): Filter for genome-wide significance to compare to (Default = 5e-8).
     - `distance_mbp` (float): Distance threshold for colocalization in Mbp (Default = 0.5 Mbp).
-    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'ensembl').
     - `cores` (int): # of cores for parallelization (Default = 1).
     - `savepath` (str): Path to save. If not used, no files are saved.
     - `save_summary_statistics` (bool): True to save downloaded summary stats if savepath is also defined.
@@ -247,7 +248,7 @@ Assess the enrichment for co-mentions with specific keywords in PubMed. Signific
     - `field` (str): Toggle for stringency of associations. Default = 'all'. Options = ['all', 'title/abstract', 'title'].
     - `keyword` (str): Keyword to search co-mentions for. Default search query is '("{gene}") AND ("{keyword"}) AND (("gene") OR ("protein"))'.
     - `custom_terms` (str): A custom search query for PubMed. Function will add and "AND" to the end of the gene and then add your custom term after. For example, the custom_term = '(("adipose") OR ("diabetes")) AND (("gene") OR ("protein"))' would produce a search of '("{gene}") AND (("adipose") OR ("diabetes")) AND (("gene") OR ("protein"))'
-    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'ensembl').
     - `email` (str): Email of a PubMed account. (Default = my email).
     - `api_key` (str): API key of PubMed account. (Default = my key).
     - `enrichment_trials` (int): # of randomization trials (Default = 100).
@@ -276,7 +277,7 @@ Assess abnormal mouse phenotype enrichments from Mouse Genome Informatics (Data 
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
-    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'ensembl').
     - `random_iter` (int): Iterations for background run (Default = 5000).
     - `plot_sig_color` (str): Color for sig. phenotypes in strip plot (Default = red).
     - `plot_q_threshold` (float): Significance threshold for strip plot (Default = 0.05).
@@ -297,7 +298,7 @@ Assess enrichment of protein family type from OpenTargets data. Enrichment is de
 #### Parameters:
 - `query` (list): List of genes
 - **Optional**:
-    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome' or user defined list (Default = 'ensembl').
+    - `custom_background` (str OR list): Background gene set. Options include 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'ensembl').
     - `level` (list): Levels to test. Options include "all", "level1", "level2", "level3", "level4", "level5" (Default = ["all"])
     - `random_iter` (int): Number of background iterations (Default = 5000).
     - `plot_q_cut` (float): Plot significance threshold (Default = 0.05).
@@ -320,7 +321,7 @@ Assess enrichment for cancer-dependent genes. Significance is determined by a Ma
 - `query` (list) : List of genes
 - `cancer_type` (list) : List of cancer cell types (Available cancer cell types can be found at - https://depmap.org/portal/ > Tools > Cell Line Selector > Create custom list (Broad types = Lineage, Most specific = Lineage Sub-subtype))
 - **Optional**:
-    - `custom_background` (str OR list): List of genes to compare against. Options include 'depmap', 'ensembl', 'reactome' or user defined list (Default = 'depmap').
+    - `custom_background` (str OR list): Background gene set. Options include 'depmap', 'ensembl', 'reactome', 'string_v10.0', 'string_v11.0', 'string_v11.5', 'string_v12.0', or user defined list (Default = 'depmap').
     - `plot_fontface` (str) : Defualt = Avenir.
     - `plot_fontsize` (int) : Default = 14.
     - `plot_query_color` (str) : Default = red.
