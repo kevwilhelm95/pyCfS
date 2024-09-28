@@ -242,12 +242,13 @@ def _annotate_p_value(df:pd.DataFrame, p_value_df: pd.DataFrame, p_value_column:
     p_value_df = p_value_df[[p_value_column]]
     out_df = out_df.merge(p_value_df, left_index = True, right_index = True, how = 'left')
     out_df = out_df.rename(columns = {p_value_column: 'Discovery Significance'})
+    out_df['abs(Discovery Significance)'] = np.abs(out_df['Discovery Significance'])
     # Add score and clean
-    out_df['InverseRanking'] = out_df['Discovery Significance'].rank(ascending = False, method = 'min').astype(int)
+    out_df['InverseRanking'] = out_df['abs(Discovery Significance)'].rank(ascending = False, method = 'min').astype(int)
     if show_indiv_scores:
         out_df['Score-Discovery Significance'] = out_df['InverseRanking'] / len(out_df)
     out_df['Score'] += out_df['InverseRanking'] / len(out_df)
-    out_df = out_df.drop(columns = ['InverseRanking'])
+    out_df = out_df.drop(columns = ['InverseRanking', 'abs(Discovery Significance)'])
     return out_df
 
 def _annotate_gold_standard(df: pd.DataFrame, gold_standard: list, show_indiv_scores:bool = True) -> pd.DataFrame:

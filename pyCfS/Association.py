@@ -763,14 +763,16 @@ def _optimize_features_hyperparameters(input_models: Any, rfe:bool, x_train:pd.D
         bayes_results[model] = cv_result
         bayes_results_plot[model] = cv_plot
     # Merge best results and params for saving
-    best_result_df = pd.DataFrame({'Model': list(best_results.keys()), 'Best_AUROC': list(best_results.values())}).sort_values(by='Best_AUROC', ascending=False).reset_index(drop=True)
+    best_result_df = pd.DataFrame({'Model': list(best_results.keys()), 'Best_AUROC': list(best_results.values())})
+    best_result_df = best_result_df.sort_values(by='Best_AUROC', ascending=False).reset_index(drop=True)
     best_params_df = pd.DataFrame.from_dict(best_params_dict, orient='index').reset_index().rename(columns={'index': 'Model'})
     best_df = best_result_df.merge(best_params_df, left_on='Model', right_on='Model', how='left')
 
     # Set the best model
     best_model = best_result_df.loc[0, 'Model']
-    model_params = best_params_dict[best_model]
-    final_estimator = _set_hyperparameters(estimator, model_params)
+    _, best_model_estimator = _get_hyperparameter_search_space(best_model, len(selected_features))[1]
+    best_model_params = best_params_dict[best_model]
+    final_estimator = _set_hyperparameters(best_model_estimator, best_model_params)
     final_estimator.fit(x_train, y_train)
 
     return final_estimator, best_model, selected_features, best_df, rfe_importances, rfe_results, rfe_results_plot, bayes_results, bayes_results_plot, models_to_test
