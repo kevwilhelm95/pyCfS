@@ -394,11 +394,14 @@ def _plot_enrichment(enrichment_df: pd.DataFrame, plot_fontsize:int, plot_fontfa
         plt.ylabel("Enrichment Term", fontsize=new_plot_fontsize+4)
         plt.title(f"{category} Enrichment", fontsize=new_plot_fontsize+6)
         plt.tight_layout(pad = 5.0)
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format = 'png', dpi = 300)
-        buffer.seek(0)
-        image = Image.open(buffer)
-        enrichment_plots[category] = image
+        try:
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format = 'png', dpi = 300)
+            buffer.seek(0)
+            image = Image.open(buffer)
+            enrichment_plots[category] = image
+        except Image.DecompressionBombError:
+            warnings.warn("Decompression Bomb Error: Image too large to save")
         plt.close()
 
     return enrichment_plots
