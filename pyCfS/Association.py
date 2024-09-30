@@ -770,7 +770,7 @@ def _optimize_features_hyperparameters(input_models: Any, rfe:bool, x_train:pd.D
 
     # Set the best model
     best_model = best_result_df.loc[0, 'Model']
-    _, best_model_estimator = _get_hyperparameter_search_space(best_model, len(selected_features))[1]
+    _, best_model_estimator = _get_hyperparameter_search_space(best_model, len(selected_features))
     best_model_params = best_params_dict[best_model]
     final_estimator = _set_hyperparameters(best_model_estimator, best_model_params)
     final_estimator.fit(x_train, y_train)
