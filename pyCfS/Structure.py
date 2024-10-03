@@ -688,7 +688,7 @@ def _plot_scw_z(output_df:pd.DataFrame, scw_plddt_cutoff: int) -> PILImage.Image
     plt.close()
     return image
 
-def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, min_af:float = 0.0, ea_lower:int = 0, ea_upper:int = 100, consequence: str = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost', scw_chain:str = 'A', scw_plddt_cutoff: int = 50, scw_min_dist_cutoff:int = 4, scw_max_dist_cutoff:int = 12, cores:int = 1, savepath: str=False) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, PILImage, PILImage, PILImage): # type: ignore
+def protein_structures(variants: pd.DataFrame, gene: str, run_scw:bool = True, max_af:float = 1.0, min_af:float = 0.0, ea_lower:int = 0, ea_upper:int = 100, consequence: str = 'missense_variant|frameshift_variant|stop_gained|stop_lost|start_lost', scw_chain:str = 'A', scw_plddt_cutoff: int = 50, scw_min_dist_cutoff:int = 4, scw_max_dist_cutoff:int = 12, cores:int = 1, savepath: str=False) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, PILImage, PILImage, PILImage): # type: ignore
     """
     Generate AlphaFold protein structures for the given variants and save them to a specified path.
 
@@ -740,28 +740,36 @@ def protein_structures(variants: pd.DataFrame, gene: str, max_af:float = 1.0, mi
 
 
     # Run SCW analysis
-    # Get the protein file and save it to a temp directory
-    plddt_background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, scw_plddt_cutoff, savepath)
-    all_background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, 0, savepath)
+    if run_scw:
+        # Get the protein file and save it to a temp directory
+        plddt_background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, scw_plddt_cutoff, savepath)
+        all_background_resi, pdb_path = _get_plddt(prot_id, gene, scw_chain, 0, savepath)
 
-    # Run analysis
-    all_output_df, case_output_df, cont_output_df = _parallel_scw_analysis(
-        pdb_path, all_residues, case_vars_residues, cont_vars_residues,
-        all_background_resi, plddt_background_resi, scw_chain,
-        scw_min_dist_cutoff, scw_max_dist_cutoff, scw_plddt_cutoff, cores
-    )
-    # Plot results
-    if not all_output_df.empty:
-        all_plot = _plot_scw_z(all_output_df, scw_plddt_cutoff)
+        # Run analysis
+        all_output_df, case_output_df, cont_output_df = _parallel_scw_analysis(
+            pdb_path, all_residues, case_vars_residues, cont_vars_residues,
+            all_background_resi, plddt_background_resi, scw_chain,
+            scw_min_dist_cutoff, scw_max_dist_cutoff, scw_plddt_cutoff, cores
+        )
+        # Plot results
+        if not all_output_df.empty:
+            all_plot = _plot_scw_z(all_output_df, scw_plddt_cutoff)
+        else:
+            all_plot = PILImage.new('RGB', (1, 1))
+        if not case_output_df.empty:
+            case_plot = _plot_scw_z(case_output_df, scw_plddt_cutoff)
+        else:
+            case_plot = PILImage.new('RGB', (1, 1))
+        if not cont_output_df.empty:
+            cont_plot = _plot_scw_z(cont_output_df, scw_plddt_cutoff)
+        else:
+            cont_plot = PILImage.new('RGB', (1, 1))
     else:
+        all_output_df = pd.DataFrame()
+        case_output_df = pd.DataFrame()
+        cont_output_df = pd.DataFrame()
         all_plot = PILImage.new('RGB', (1, 1))
-    if not case_output_df.empty:
-        case_plot = _plot_scw_z(case_output_df, scw_plddt_cutoff)
-    else:
         case_plot = PILImage.new('RGB', (1, 1))
-    if not cont_output_df.empty:
-        cont_plot = _plot_scw_z(cont_output_df, scw_plddt_cutoff)
-    else:
         cont_plot = PILImage.new('RGB', (1, 1))
 
     # Run if savepath is definedf

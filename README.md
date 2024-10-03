@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.15 <br>
+Version 0.0.15.16 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -469,6 +469,7 @@ Generates a Pymol script to visualize variant location in 3D protein structure (
 - `variants` (pd.DataFrame): Dataframe of variants by sample. Can get from "variants_by_sample()"
 - `gene` (str): Gene name that you wish to analyze ("PDGFRB")
 - **Optional**:
+    - `run_scw` (bool): Toggle running SCW analysis. (Default = True)
     - `scw_chain` (str): Chain ID to use for AlphaFold structure. Default = "A"
     - `scw_plddt_cutoff` (int): Minimum pLDDT confidence score to include for background analysis. Default = 50
     - `scw_min_dist_cutoff` (int): Minimum distance to analyze clustering enrichment for. Default = 4
