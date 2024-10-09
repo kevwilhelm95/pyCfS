@@ -883,8 +883,10 @@ def _plot_histo_w_or(predictions_gene: pd.DataFrame, bins:int = 50, xlim_lower:f
         confidence_interval = [float(f'{x:.2f}') for x in confidence_interval]
         return odds_ratio, p_value, confidence_interval
 
-    thrlist = np.arange(0.5, 1.0, 0.05).tolist()
-    thrlist = np.arange(0.5, 0.6, 0.01).tolist()
+    max_thr = predictions_gene['Case'].max()
+    thrlist = np.arange(0.5, max_thr, 0.05).tolist()
+    if len(thrlist) < 4:
+        thrlist = np.arange(0.5, max_thr, 0.01).tolist()
     or_df = pd.DataFrame(columns=['Thr', 'OR', 'CI', 'pval',
                                   'Dis w exp', 'HC w exp', 'Dis w/o exp', 'HC w/o exp'])
     for i, thr in enumerate(thrlist):
