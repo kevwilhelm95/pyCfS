@@ -20,6 +20,7 @@ from rpy2.robjects.vectors import StrVector # type: ignore
 import rpy2.rinterface_lib.callbacks # type: ignore
 import logging
 import pandas as pd
+import re
 import urllib.request
 import numpy as np
 import time
@@ -338,7 +339,13 @@ def lollipop_plot(variants: pd.DataFrame, gene: str, group:str = 'both', case_po
         new_savepath = os.path.join(savepath, f'LollipopPlots/{gene}/')
         os.makedirs(new_savepath, exist_ok=True)
         plot.save(new_savepath + f'{gene}_{group}_EA{ea_lower}-{ea_upper}_AF{max_af}-{min_af}_lollipop_plot.png')
-    # Need to group by zyg for fishers exact test
+        # Save the p-values
+        with open(new_savepath + f'{gene}_{group}_EA{ea_lower}-{ea_upper}_AF{max_af}-{min_af}_pvalues.txt', 'w') as f:
+            f.write(f"Parameters: gene={gene}, n_case={case_pop}, n_cont={cont_pop}, EA={ea_lower}-{ea_upper}, AF={max_af}-{min_af}\n")
+            f.write(f'p-value: {pval}\n')
+            f.write(f'Odds Ratio: {odds_ratio}\n')
+            f.write(f'Lower CI: {lower_ci}\n')
+            f.write(f'Upper CI: {upper_ci}\n')
     return plot, pval, odds_ratio, lower_ci, upper_ci
 #endregion
 
@@ -409,7 +416,7 @@ def _prepare_resi_df(variants: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: A DataFrame containing unique residues extracted from the variants DataFrame.
     """
     residues = variants['SUB'].unique().tolist()
-    residues = ["".join(filter(str.isdigit, residue)) for residue in residues]
+    residues = [re.search(r'\d+', residue).group() for residue in residues]
     vars_residues = pd.DataFrame({'residues': residues})
     return vars_residues
 

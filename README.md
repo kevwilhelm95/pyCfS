@@ -1,5 +1,5 @@
 # pyCfS
-Version 0.0.15.17 <br>
+Version 0.0.15.18 <br>
 The aggregation of Lichtarge Lab genotype-phenotype validation experiments<br>
 
 ## Installation
@@ -14,7 +14,7 @@ Activate git-lfs - `git lfs install` <br>
 ### Create an anaconda environment and install non-pip packages
 conda create -n pyCfS python=3.8.18 <br>
 conda activate pyCfS<br>
-conda install -c conda-forge r-base r-ggplot2=3.4.0 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr r-cowplot r-tidyverse=1.3.2 <br>
+conda install -c conda-forge r-base r-ggplot2 r-deldir r-rcppeigen r-interp rpy2 rasterio r-tzdb r-vroom r-readr r-cowplot r-tidyverse <br>
 
 ### Install pyCfS (in anaconda environment)
 pip install git+https://github.com/kevwilhelm95/pyCfS.git <br>
@@ -387,7 +387,7 @@ Notes: If multiple models are input (e.g. ['RF', 'LR', 'GB']), the three models 
 - `pd.DataFrame`: Table showing probability of case/control for evaluation/test samples.
 - `pd.DataFrame`: Table of feature importance scores for each feature.
 
-### `odds_ratios` under work
+### `odds_ratios`
 `Parallelized` <br>
 Takes the variants_by_sample output and performs odds ratio calculations based on allelic counts between two sets of patients. We recommend performing variant-based calculations on variants with an allele frequency > 1%, as more rare variants will be underpowered. We recommend performing gene-based and domain-based calculations on variants with allele frequency < 1%, as common variants can confound the signal. For a detailed description of how the "method", "model", and "level" arguments affect the odds ratios, please see "resource/odds_ratio_calculations.pdf".
 #### Parameters:
