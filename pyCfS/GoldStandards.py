@@ -8,7 +8,8 @@ Functions:
 import pkg_resources
 import io
 import os
-import tqdm
+from tqdm import tqdm
+import concurrent.futures
 import requests
 import time
 from multiprocessing import Pool
