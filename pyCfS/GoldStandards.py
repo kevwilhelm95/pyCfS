@@ -2890,7 +2890,7 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
     return image
 
 def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl',
-                      field:str = 'all', email:str = 'spencer.hamrick@bcm.edu', api_key: str = 'c728b5dca70b4cfb7a9620796f428841bd08',
+                      field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508',
                       enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]],
                       plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, dict, dict): # type: ignore
     """
