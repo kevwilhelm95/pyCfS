@@ -8,6 +8,8 @@ Functions:
 import pkg_resources
 import io
 import os
+from tqdm import tqdm
+import concurrent.futures
 import requests
 import time
 from multiprocessing import Pool
@@ -2768,9 +2770,9 @@ def _fetch_query_pubmed(query: list, keyword: str, custom_terms:str, email: str,
 
     # Execute concurrent API calls to PubMed
     with concurrent.futures.ThreadPoolExecutor(max_workers=cores) as executor:
+        # Add tqdm for progress bar
         results = executor.map(_entrez_search, query, repeat(keyword), repeat(custom_terms), repeat(email), repeat(api_key), repeat(field))
-        # Process results for each gene
-        for result in results:
+        for result in tqdm(results, total=len(query), desc="Fetching PubMed data"):
             gene, n_paper_dis = _parse_entrez_result(result)
             # Populate the data frames with the results
             out_df.loc[gene, 'PMID for Gene + ' + col_name] = "; ".join(result.get('IdList', []))
@@ -2784,43 +2786,52 @@ def _fetch_query_pubmed(query: list, keyword: str, custom_terms:str, email: str,
 
     return sorted_out_df
 
-def _fetch_random_pubmed(query: list, disease_query: str, custom_terms:str, email: str, api_key: str, cores: int, field:str, trials:int, background_genes:list, verbose: int = 0) -> list:
+def _fetch_random_pubmed(query: list, disease_query: str, custom_terms: str, email: str, api_key: str, cores: int,
+                         field: str, trials: int, background_genes: list, verbose: int = 0) -> list:
     """
     Performs PubMed queries on random sets of genes and records the number of papers
     associated with a disease for each gene in the set.
     This function is used to establish a baseline or control for comparison with
     a set of query genes of interest.
+
     Args:
         query (List[str]): A list of genes to be used as a query size reference.
         background_genes (List[str]): A list of background genes from which random samples are drawn.
         disease_query (str): A disease term to be used in conjunction with genes for querying PubMed.
         email (str): The email address associated with the NCBI account for Entrez queries.
         api_key (str): The API key for making requests to the NCBI Entrez system.
-        max_workers (int): The number of worker threads to use for concurrent requests.
+        cores (int): The number of worker threads to use for concurrent requests.
         trials (int, optional): The number of random gene sets to query. Defaults to 100.
+
     Returns:
         List[pd.DataFrame]: A list of DataFrames, each containing the count of papers for a random gene set.
     """
     randfs = []
     if len(background_genes) == 0:
         background_genes = _load_grch38_background()
-
-    for i in range(trials):
+    if custom_terms:
+        out_query = custom_terms
+    else:
+        out_query = disease_query
+    # Add a progress bar using tqdm
+    for i in tqdm(range(trials), desc="Fetching random PubMed data", ncols=100):
         if i % 10 == 0 and verbose > 0:
-                print(f" Random Trial : {i}")
-        rng = np.random.default_rng(i*3)
-        randgenes = rng.choice(background_genes, size = len(query), replace = False).tolist()
+            print(f" Random Trial : {i}")
+        rng = np.random.default_rng(i * 3)
+        randgenes = rng.choice(background_genes, size=len(query), replace=False).tolist()
         tempdf = pd.DataFrame(columns=['Count'])
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=cores) as executor:
             # Map the search function over the random genes
-            results = executor.map(_entrez_search, randgenes, repeat(disease_query), repeat(custom_terms), repeat(email), repeat(api_key), repeat(field))
+            results = executor.map(_entrez_search, randgenes, repeat(disease_query), repeat(custom_terms),
+                                   repeat(email), repeat(api_key), repeat(field))
             # Process the results and update the temporary DataFrame
             for result in results:
                 gene, n_paper_dis = _parse_entrez_result(result)
                 n_paper_dis = result.get('Count', 0)
                 tempdf.loc[gene, 'Count'] = int(n_paper_dis)
-            tempdf = tempdf.rename(columns = {'Count': 'PubMed_CoMentions-' + disease_query})
+            tempdf = tempdf.rename(columns={'Count': 'PubMed_CoMentions-' + out_query})
+
         # Append the temporary DataFrame to the list
         randfs.append(tempdf)
 
@@ -2878,7 +2889,10 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
 
     return image
 
-def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, dict, dict): # type: ignore
+def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl',
+                      field:str = 'all', email:str = 'kwilhelm95@gmail.com', api_key: str = '3a82b96dc21a79d573de046812f2e1187508',
+                      enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]],
+                      plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, dict, dict): # type: ignore
     """
     Searches PubMed for comention of genes within articles related to a given field and
     performs a randomization test to compute Z-scores for observed mention counts.
@@ -2903,6 +2917,7 @@ def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = Fals
         dict : Dictionary, where keys = enrichment_cutoff values and values = (number of query genes in subset, z_score)
         dict : Dictionary, where keys = enrichment_cutoff values and values = enrichment plot.
     """
+    print('Running PubMed CoMentions')
     output_name = keyword if keyword else custom_terms
     # Pull the query co_mentions with keyword
     query_comention_df = _fetch_query_pubmed(query, keyword, custom_terms, email, api_key, field, workers)
