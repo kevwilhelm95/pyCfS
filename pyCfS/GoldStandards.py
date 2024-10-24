@@ -2809,7 +2809,10 @@ def _fetch_random_pubmed(query: list, disease_query: str, custom_terms: str, ema
     randfs = []
     if len(background_genes) == 0:
         background_genes = _load_grch38_background()
-
+    if custom_terms:
+        out_query = custom_terms
+    else:
+        out_query = disease_query
     # Add a progress bar using tqdm
     for i in tqdm(range(trials), desc="Fetching random PubMed data", ncols=100):
         if i % 10 == 0 and verbose > 0:
@@ -2827,7 +2830,7 @@ def _fetch_random_pubmed(query: list, disease_query: str, custom_terms: str, ema
                 gene, n_paper_dis = _parse_entrez_result(result)
                 n_paper_dis = result.get('Count', 0)
                 tempdf.loc[gene, 'Count'] = int(n_paper_dis)
-            tempdf = tempdf.rename(columns={'Count': 'PubMed_CoMentions-' + disease_query})
+            tempdf = tempdf.rename(columns={'Count': 'PubMed_CoMentions-' + out_query})
 
         # Append the temporary DataFrame to the list
         randfs.append(tempdf)
@@ -2886,7 +2889,10 @@ def _plot_results(disease_query: str, background: list, observation: int, query:
 
     return image
 
-def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl', field:str = 'all', email:str = 'spencer.hamrick@bcm.edu', api_key: str = 'c728b5dca70b4cfb7a9620796f428841bd08', enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]], plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, dict, dict): # type: ignore
+def pubmed_comentions(query:list, keyword: str = False, custom_terms: str = False, custom_background: Any = 'ensembl',
+                      field:str = 'all', email:str = 'spencer.hamrick@bcm.edu', api_key: str = 'c728b5dca70b4cfb7a9620796f428841bd08',
+                      enrichment_trials: int = 100, workers: int = 15, run_enrichment:bool = True, enrichment_cutoffs:list = [[-1,0], [0,5], [5,15], [15,50], [50,100000]],
+                      plot_background_color:str = 'gray', plot_query_color: str = 'red', plot_fontface:str = 'Avenir', plot_fontsize:int = 14, savepath:Any = False, verbose:int = 0) -> (pd.DataFrame, dict, dict): # type: ignore
     """
     Searches PubMed for comention of genes within articles related to a given field and
     performs a randomization test to compute Z-scores for observed mention counts.
