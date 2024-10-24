@@ -8,6 +8,7 @@ Functions:
 import pkg_resources
 import io
 import os
+import tqdm
 import requests
 import time
 from multiprocessing import Pool
